@@ -1,0 +1,7 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from user import User
+from docclass import DocClass
+
+__all__= ['User', 'DocClass']
