@@ -60,13 +60,12 @@ class User(Resource):
     
     def get_user(self, user_name, message):
         cursor = app.mysql.connect().cursor()
-        cursor.execute("SELECT * from user where name = '" + user_name + "'")
+        cursor.execute("SELECT id,name,createid from user where name = '" + user_name + "'")
         data = cursor.fetchone()
         if data is None:
             message['error'] = 3
             message['message'] = 'no such user with username:' + user_name
             return
-        data = json.dumps(data)
         message['data'] = data
 
     def del_user(self, user_name, message):
@@ -87,7 +86,7 @@ class User(Resource):
             message['error'] = 4
             message['message'] = 'create_user:%s not exist' % create_user
             return
-        create_id = data[0]
+        create_id = data['id']
         cursor.execute("SELECT * FROM user WHERE name = '" + user_name + "'")
         data = cursor.fetchone()
         if data is not None:

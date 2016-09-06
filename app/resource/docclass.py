@@ -14,6 +14,7 @@ from flask_restful import Resource, reqparse
 import app
 import copy
 import json
+from flask import jsonify
 
 class DocClass(Resource):
     RETURN_MESSAGE = {'error' : 0, 'message' : '', 'data' : ''}
@@ -31,7 +32,6 @@ class DocClass(Resource):
 
         message = copy.deepcopy(DocClass.RETURN_MESSAGE)
 
-        print args['action']
         if 'action' not in args or args['action'] is None or \
             args['action'] == '':
             args['action'] = 'get_all'
@@ -75,15 +75,19 @@ class DocClass(Resource):
             message['error'] = 1
             message['message'] = 'not support api'
 
-        return json.dumps(message, ensure_ascii=False), 202
+        print message
+
+        return jsonify(data=message['data'], error=message['error'], message=message['message'])
 
     def get_all_docclass(self, message):
         conn = app.mysql.connect()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM docclass")
+        cursor.execute("SELECT id,name,parent_id,customizable FROM docclass")
         data = cursor.fetchall()
         if data is not None:
-            message['data'] = json.dumps(data) 
+            message['data'] = []
+            for item in data:
+                message['data'].append(item) 
         conn.close()
         cursor.close()
     
@@ -114,7 +118,7 @@ class DocClass(Resource):
             message['error'] = 7
             message['message'] = 'mod docclass, no docclass:%s' % name
             return
-        base_id = data[0]
+        base_id = data['id']
         if new_name is None and new_parent_id is not None:
             cursor.execute("SELECT * FROM docclass WHERE id=%d" % new_parent_id)
             data = cursor.fetchone()
@@ -142,7 +146,7 @@ class DocClass(Resource):
             message['error'] = 9
             message['message'] = 'no such docclass:%s exist' % name
             return
-        class_id = data[0]
+        class_id = data['id']
         cursor.execute("SELECT * FROM doc WHERE class_id=%d" % class_id) 
         data = cursor.fetchone()
         if data is not None:
