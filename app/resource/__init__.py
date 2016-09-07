@@ -3,5 +3,6 @@
 
 from user import User
 from docclass import DocClass
+from viewlog import ViewLog
 
-__all__= ['User', 'DocClass']
+__all__= ['User', 'DocClass', 'ViewLog']

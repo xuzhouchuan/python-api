@@ -11,4 +11,3 @@ Date: 2016/09/07 19:46:46
 
 from .app import app, api, mysql, db, session
 
-session.check_thread()
