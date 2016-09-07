@@ -30,7 +30,7 @@ class Session(object):
     def __init__(self):
         self.clear_mutex = threading.Lock()
         self.users = {}
-    def init(self):
+    def check_thread(self):
         thread.start_new_thread(self.clear_invalid_user_thread, ())
     def add_user(self, name):
         timestamp = time.time()
