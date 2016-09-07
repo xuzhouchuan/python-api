@@ -34,6 +34,7 @@ session.init()
 
 api.add_resource(User,'/user')
 api.add_resource(DocClass, '/docclass')
+api.add_resource(ViewLog, '/viewlog')
 
 
 @app.after_request
