@@ -14,11 +14,12 @@ Description:
 """
 
 from flask_restful import Resource, reqparse
-import app
 import copy
 import json
 import datetime
 from flask import jsonify
+from sqlalchemy.sql import desc
+from app import *
 
 class CJsonEncoder(json.JSONEncoder):  
     def default(self, obj):  
@@ -51,18 +52,12 @@ class ViewLog(Resource):
             args['page'] = 0
         top = (args['page'] + 1) * 10
         skip = args['page'] * 10
-
-        conn = app.mysql.connect()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM log order by id desc limit %d" % top)
-        data = cursor.fetchall()
-        newdata = []
-        for i in range(skip, len(data)):
-            newdata.append(data[i])
+        
+        logs = Log.query.order_by(desc(Log.optime)) 
+        for log in logs:
+            newdata.append(log.to_json())
         if newdata is not None:
             message['data'] = newdata
-        conn.close()
-        cursor.close()
         #return json.dumps(message, ensure_ascii=False, cls=CJsonEncoder), 202
         return jsonify(data=message['data'], message=message['message'], error=message['error'])
 

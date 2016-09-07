@@ -27,6 +27,12 @@ class User(db.Model):
     def __repr__(self):
         return '<User %s, create_by:%d>' % (self.username, self.createid)
 
+    def to_json(self):
+        return {'id' : self.id,
+                'name' : self.username,
+                'create_user_id' : self.createid
+               }
+
 class DocClass(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(256))
@@ -38,9 +44,16 @@ class DocClass(db.Model):
         self.name = name
         self.parent_id = parent_id
         self.customizable = customizable
-
+    
     def __repr__(self):
         return '<DocClass %r, %d>' % (self.name, self.parent_id)
+    
+    def to_json(self):
+        return {'id' : self.id,
+                'name' : self.name,
+                'parent_id' : self.parent_id,
+                'customizable' : self.customizable
+                }
 
 class Doc(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -50,17 +63,28 @@ class Doc(db.Model):
     md5 = db.Column(db.String(64))
     file_type = db.Column(db.String(32))
     content = db.Column(db.PickleType)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    upload_time = db.Column(db.DateTime)
 
-    def __init__(self, name, docclass_id, path, md5, file_type, content):
+    def __init__(self, name, docclass_id, path, file_type, content, author_id, upload_time):
         self.name = name
         self.docclass_id = docclass_id
         self.path = path
-        self.md5 = md5
         self.file_type = file_type
         self.content = content
+        self.author_id = author_id
+        self.upload_time = upload_time
 
     def __repr__(self):
-        return '<Doc %s, %s>' % (self.name, self.file_type)
+        return '<Doc %s, %d, %s>' % (self.name, self.author_id, self.file_type)
+
+    def to_json(self):
+        return {'id' : self.id,
+                'docclass_id' : self.docclass_id,
+                'file_type' : self.file_type,
+                'content' : self.content,
+                'author_id' : author_id
+               }
 
 class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -79,6 +103,14 @@ class Log(db.Model):
 
     def __repr__(self):
         return '<Log %s %s %s>' % (self.user_id, self.optime, self.optye)
+
+    def to_json(self):
+        return {'user_id' : self.user_id,
+                'optime' : self.optime,
+                'optype' : self.optype,
+                'opinfo' : self.opinfo,
+                'exinfo' : self.exinfo
+                }
 
 class Authority(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -101,7 +133,7 @@ class Authority(db.Model):
         elif self.doc_id is not None:
             return '<Authority %d doc:%d %s %s>' % (self.user_id, self.doc_id, self.start_time, self.end_time)
 
-if __name__ == '__main__':
+def init_db():
     db.drop_all()
     db.create_all()
     db.session.commit()
@@ -130,3 +162,5 @@ if __name__ == '__main__':
     print users
     classs = DocClass.query.all()
     print classs
+if __name__ == '__main__':
+    pass
