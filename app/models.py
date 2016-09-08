@@ -80,10 +80,11 @@ class Doc(db.Model):
 
     def to_json(self):
         return {'id' : self.id,
+                'name' : self.name,
                 'docclass_id' : self.docclass_id,
                 'file_type' : self.file_type,
                 'content' : self.content,
-                'author_id' : author_id
+                'author_id' : self.author_id
                }
 
 class Log(db.Model):
@@ -112,7 +113,7 @@ class Log(db.Model):
                 'exinfo' : self.exinfo
                 }
 
-class Authority(db.Model):
+class BorrowAuthority(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     doc_id = db.Column(db.Integer, db.ForeignKey('doc.id'))
@@ -132,6 +133,15 @@ class Authority(db.Model):
             return '<Authority %d docclass:%d %s %s>' % (self.user_id, self.docclass_id, self.start_time, self.end_time)
         elif self.doc_id is not None:
             return '<Authority %d doc:%d %s %s>' % (self.user_id, self.doc_id, self.start_time, self.end_time)
+
+    def to_json(self):
+        return {'id' : self.id,
+                'user_id' : self.user_id,
+                'doc_id' : self.doc_id,
+                'docclass_id' : self.docclass_id,
+                'start_time' : self.start_time,
+                'end_time' : self.end_time
+               }
 
 def init_db():
     db.drop_all()

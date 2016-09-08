@@ -34,10 +34,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/test_oa?cha
 mysql.init_app(app)
 
 
-from resource import UserResource, DocClassResource, DocResource
+from resource import UserResource, DocClassResource, DocResource, BorrowAuthorityResource
 api.add_resource(UserResource,'/user')
 api.add_resource(DocClassResource, '/docclass')
 api.add_resource(DocResource, '/doc')
+api.add_resource(BorrowAuthorityResource, '/borrow')
 
 session.check_thread()
 

@@ -5,5 +5,6 @@ from user import UserResource
 from docclass import DocClassResource
 from doc import DocResource
 from viewlog import ViewLog
+from borrow_authority import BorrowAuthorityResource
 
-__all__= ['UserResource', 'DocClassResource', 'ViewLog', 'DocResource']
+__all__= ['UserResource', 'DocClassResource', 'ViewLog', 'DocResource', 'BorrowAuthorityResource']

@@ -39,7 +39,7 @@ class DocResource(Resource):
         parser.add_argument('action', required=True)
         parser.add_argument('file_id')
         parser.add_argument('content')
-        parser.add_argument('file', type=werkzeug.datastructures.FileStorage, location='files')
+        parser.add_argument('file', type=werkzeug.datastructures.FileStorage, location=['files', 'form'])
         parser.add_argument('docclass_id', type=int)
         parser.add_argument('username', required=True)
         return parser.parse_args()
@@ -59,8 +59,6 @@ class DocResource(Resource):
                 return message, 412
             fh = open(args['path'], 'rb')
             return send_file(fh, attachment_filename = args['file_name'], as_attachment=True)
-            return message['data'], 200, {'Content-Type' : "application/octet-stream", \
-                                          'Content-Disposition' : "inline; filename=" + args['file_name']}
     def post(self):
         args = self._parse_request()
         print args
@@ -73,8 +71,6 @@ class DocResource(Resource):
                 return message, 412
             fh = open(args['path'], 'rb')
             return send_file(fh, attachment_filename = args['file_name'], as_attachment=True)
-            return message['data'], 200, {'Content-Type' : "application/octet-stream", \
-                                          'Content-Disposition' : "inline; filename=" + args['file_name']}
 
     def _process_action(self, args, message):
         if 'action' not in args or args['action'] is None:
@@ -84,6 +80,10 @@ class DocResource(Resource):
             self._upload(args, message)
         elif args['action'] == 'get':
             self._get_doc(args, message)
+        elif args['action'] == 'get_info':
+            self._get_doc_info(args, message)
+        elif args['action'] == 'del':
+            self._del_doc(args, message)
 
     def _upload(self, args, message):
         if 'file' not in args or args['file'] is None:
@@ -110,7 +110,7 @@ class DocResource(Resource):
         docclazz = DocClass.query.get(args['docclass_id'])
         if docclazz is None:
             message['error'] = 6
-            message['messsage'] = 'docclass not exist:%d' % args['docclass_id']
+            message['message'] = 'docclass not exist:%d' % args['docclass_id']
             return
         docclazz_id = docclazz.id
         save_name = '%d_%s_%s' % (docclazz.id, file_name, time.strftime('%Y%m%d%H%M%S',time.localtime(time.time())))
@@ -147,8 +147,39 @@ class DocResource(Resource):
 
         message['data'] = binary
         message['message'] = 'success'
-        
+    def _get_doc_info(self, args, message):
+        if 'file_id' not in args or args['file_id'] is None:
+            message['error'] = 7
+            message['message'] = 'no file name provided'
+            return
+        file_id = args['file_id']
+        doc = Doc.query.get(file_id)
+        if doc is None:
+            message['error'] = 9
+            message['message'] = 'file not exist in database'
+            return
+        args['file_name'] = doc.name
+        args['path'] = doc.path
+        message['data'] = doc.to_json()
+        message['message'] = 'get info successful'
 
-
+    def _del_doc(self, args, message):
+        if 'file_id' not in args or args['file_id'] is None:
+            message['error'] = 7
+            message['message'] = 'no file name provided'
+            return
+        file_id = args['file_id']
+        doc = Doc.query.get(file_id)
+        if doc is None:
+            message['error'] = 9
+            message['message'] = 'file not exist in database'
+            return
+        path = doc.path
+        doc_name = doc.name
+        db.session.delete(doc)
+        db.session.commit()
+        if path is not None:
+            os.remove(path)
+        message['message'] = 'delete file:%s successful' % doc_name
 
 
