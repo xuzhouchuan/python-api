@@ -92,7 +92,7 @@ class DocResource(Resource):
             return
         if 'docclass_id' not in args or args['docclass_id'] is None:
             message['error'] = 8
-            messasge['message'] = 'no docclass_id provided'
+            message['message'] = 'no docclass_id provided'
             return
         file = args['file']
         file_name = secure_filename(file.filename)
