@@ -55,6 +55,8 @@ class UserResource(Resource):
             self.del_user(username, message)
         elif args['action'] == 'get':
             self.get_user(username, message)
+        elif args['action'] == 'get_all':
+            self.get_all_user(args, message)
         else:
             message['error'] = 1
             message['message'] = 'action not support'
@@ -92,6 +94,13 @@ class UserResource(Resource):
         print "INSERT INTO user(name, pass, createid) VALUES ('%s', '%s', %s)" \
                 % (username, password, create_user_name)
         message['messsage'] = 'add user successful'
+    def get_all_user(self, args, message):
+        users = User.query.all()
+        data = []
+        for user in users:
+            data.append(user.to_json())
+        message['data'] = data
+        message['message'] = 'get all user successful'
 
 
 

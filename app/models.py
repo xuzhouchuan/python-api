@@ -12,6 +12,7 @@ Date: 2016/09/07 13:26:06
 """
 
 from app import db
+from datetime import datetime
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -84,7 +85,8 @@ class Doc(db.Model):
                 'docclass_id' : self.docclass_id,
                 'file_type' : self.file_type,
                 'content' : self.content,
-                'author_id' : self.author_id
+                'author_id' : self.author_id,
+                'filesname' : self.path.rsplit('/', 1)[1]
                }
 
 class Log(db.Model):
@@ -143,6 +145,39 @@ class BorrowAuthority(db.Model):
                 'end_time' : self.end_time
                }
 
+class ApplyFor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    doc_id = db.Column(db.Integer, db.ForeignKey('doc.id'))
+    docclass_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
+    start_time = db.Column(db.DateTime)
+    end_time = db.Column(db.DateTime)
+    passed = db.Column(db.Boolean)
+
+    def __init__(self, user_id, doc_id, docclass_id, start_time, end_time):
+        self.user_id = user_id
+        self.doc_id = doc_id
+        self.docclass_id = docclass_id
+        self.start_time = start_time
+        self.end_time = end_time
+        self.passed = False
+
+    def __repr__(self):
+        if self.docclass_id is not None:
+            return '<ApplyFor %d docclass:%d %s %s>' % (self.user_id, self.docclass_id, self.start_time, self.end_time)
+        elif self.doc_id is not None:
+            return '<ApplyFor %d doc:%d %s %s>' % (self.user_id, self.doc_id, self.start_time, self.end_time)
+
+    def to_json(self):
+        return {'id' : self.id,
+                'user_id' : self.user_id,
+                'doc_id' : self.doc_id,
+                'docclass_id' : self.docclass_id,
+                'start_time' : self.start_time,
+                'end_time' : self.end_time,
+                'passed' : self.passed
+               }
+
 def init_db():
     db.drop_all()
     db.create_all()
@@ -161,13 +196,26 @@ def init_db():
     test = User('test', 'test', 1)
     db.session.add(admin)
     db.session.add(test)
-    depart = DocClass(u'你好', 1, True)
-    db.session.add(depart)
-
-    db.session.commit()
+    if True:
+        name = [u'最高检', u'办公厅', u'检察长办公室', u'秘书处', u'人大代表联络处', u'新规则文书档案', u'老规则文书档案']
+        parent = [1, 1, 2, 2, 2, 3, 3]
+        for i in range(0, len(name)):
+            dep = DocClass(name[i], parent[i], True)
+            db.session.add(dep)
+            db.session.commit()
+    else:
+        depart = DocClass(u'你好', 1, True)
+        db.session.add(depart)
+        db.session.commit()
 
     users = User.query.all()
     print users[0].id
+
+    if True:
+        for i in range(13):
+            log = Log(1, datetime.now(), "null", "null", "null")
+            db.session.add(log)
+            db.session.commit()
 
     print users
     classs = DocClass.query.all()

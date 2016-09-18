@@ -159,7 +159,7 @@ class DocClassResource(Resource):
             message['message'] = 'docclass:%s not empty, has exist docs' % name
             return
         db.session.delete(doc_clazz)
-        db.session.close()
+        db.session.commit()
         message['message'] = 'remove docclass successfull'
 
     def get_docs(self, args, message):

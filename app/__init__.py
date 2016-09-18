@@ -18,6 +18,7 @@ from flask import request
 from flask_sqlalchemy import SQLAlchemy
 import MySQLdb.cursors
 from session import Session
+#from app.models import Log
 
 
 app = Flask(__name__)
@@ -34,11 +35,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/test_oa?cha
 mysql.init_app(app)
 
 
-from resource import UserResource, DocClassResource, DocResource, BorrowAuthorityResource
+from models import *
+from resource import UserResource, DocClassResource, DocResource, BorrowAuthorityResource, ViewLog, ApplyForResource
 api.add_resource(UserResource,'/user')
 api.add_resource(DocClassResource, '/docclass')
 api.add_resource(DocResource, '/doc')
 api.add_resource(BorrowAuthorityResource, '/borrow')
+api.add_resource(ViewLog, '/viewlog')
+api.add_resource(ApplyForResource, '/apply')
 
 session.check_thread()
 
@@ -65,15 +69,17 @@ def login():
     else:
         message['error'] = 1
         message['message'] = 'invalid username or uncorrect password'
+    
+    user = User.query.filter_by(username=request.form['username']).first()
+    log = Log(user.id, datetime.now(), "login", "", "");
+    db.session.add(log)
+    db.session.commit()
 
     return jsonify(message)
 
 def check_login(name, password):
-    conn = mysql.connect()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM user WHERE name = '" + name + "' AND pass = '" + password + "'")
-    data = cursor.fetchone()
-    if data is None:
+    user = User.query.filter_by(username=name, password=password).first()
+    if user is None:
         return None
     token = session.add_user(name)
 

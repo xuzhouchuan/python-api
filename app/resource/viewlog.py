@@ -53,15 +53,17 @@ class ViewLog(Resource):
         top = (args['page'] + 1) * 10
         skip = args['page'] * 10
         
+        print "skip:%d top:%d" % (skip, top)
         logs = Log.query.order_by(desc(Log.optime)) 
+        newdata = []
         for log in logs:
             newdata.append(log.to_json())
-        if newdata is not None:
-            message['data'] = newdata
+        res = []
+        for i in range(skip, min(top, len(newdata))):
+            res.append(newdata[i])
+        if res is not None:
+            message['data'] = res
         #return json.dumps(message, ensure_ascii=False, cls=CJsonEncoder), 202
         return jsonify(data=message['data'], message=message['message'], error=message['error'])
 
             
-
-
-

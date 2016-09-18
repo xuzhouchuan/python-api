@@ -6,9 +6,9 @@
 ########################################################################
  
 """
-File: borrow_authority.py
+File: apply_for.py
 Author: AngelClover(AngelClover@aliyun.com)
-Date: 2016/09/08 13:07:31
+Date: 2016/09/16 21:18:24
 """
 from flask_restful import Resource, reqparse
 import copy
@@ -16,10 +16,10 @@ import json
 import datetime
 from flask import jsonify
 
-from app.models import  BorrowAuthority, User, DocClass, Doc
+from app.models import  BorrowAuthority, User, DocClass, Doc, ApplyFor
 from app import db
 
-class BorrowAuthorityResource(Resource):
+class ApplyForResource(Resource):
     RETURN_MESSAGE = {'error' : 0, 'message' : '', 'data' : ''}
     def __init__(self):
         pass
@@ -28,18 +28,18 @@ class BorrowAuthorityResource(Resource):
     def post(self):
         parser = reqparse.RequestParser(bundle_errors=True)
         parser.add_argument('action')
-        parser.add_argument('auth_id', type=int)
         parser.add_argument('username', required=True)
-        parser.add_argument('to_username')
+        #parser.add_argument('to_username')
         parser.add_argument('to_doc_id_list', type=int, action='append')
         parser.add_argument('to_docclass_id_list', type=int, action='append')
         parser.add_argument('doc_id')
         parser.add_argument('docclass_id')
         parser.add_argument('start_time')
         parser.add_argument('end_time')
+        parser.add_argument('apply_id')
         args = parser.parse_args()
 
-        message = copy.deepcopy(BorrowAuthorityResource.RETURN_MESSAGE)
+        message = copy.deepcopy(ApplyForResource.RETURN_MESSAGE)
         if args['action'] is None:
             args['action'] = 'get'
         self._process_action(args, message)
@@ -47,37 +47,50 @@ class BorrowAuthorityResource(Resource):
         return jsonify(data=message['data'], error=message['error'], messge=message['message'])
 
     def _process_action(self, args, message):
-        if args['action'] == 'get':
+        if args['action'] == 'get':#user get list
             if args['username'] != 'root':
                 self._get_authorities(args['username'], message)
             elif args['to_username'] is not None:
                 self._get_authorities(args['to_username'], message)
-        elif args['action'] == 'get_all':
+        elif args['action'] == 'get_all':#root get list
             if args['username'] != 'root':
                 message['error'] = 1
                 message['message'] = "not super user, cant get all auth"
                 return
             self._get_all_authorities(message)
-        elif args['action'] == 'add':
+        elif args['action'] == 'add':#user add list
+            """
             if args['username'] != 'root':
                 message['error'] = 1
                 message['message'] = 'not super user, cannot add borrow auth'
                 return
+                """
             print args
-            self._add_authority(args['to_username'], args['to_doc_id_list'],
+            self._add_authority(args['username'], args['to_doc_id_list'],
                     args['to_docclass_id_list'], args['start_time'], args['end_time'], message)
-        elif args['action'] == 'del':
+        elif args['action'] == 'del':#user delete
+            """
             if args['username'] != 'root':
                 message['error'] = 1
                 message['message'] = 'not super user, cannot del borrow auth'
                 return
-            self._del_authority(args['auth_id'], message)
-        elif args['action'] == 'mod':
+                """
+            self._del_authority(args['apply_id'], args['username'], message)
+            """
+        elif args['action'] == 'mod':#not use
             if args['username'] != 'root':
                 message['error'] = 1
                 message['message'] = 'not super user, cannot mod borrow auth'
                 return
-            self._mod_authority(args['auth_id'], args['end_time'], message)
+            self._mod_authority(args['apply_id'], args['end_time'], message)
+            """
+        elif args['action'] == 'approve':#root change one application to borrowauthority
+            if args['username'] != 'root':
+                message['error'] = 1
+                message['message'] = 'not super user, cannot approve applications'
+                return
+            self._approve_authority(args['apply_id'], message)
+
         else:
             message['error'] = 2
             message['message'] = 'not support action'
@@ -93,14 +106,19 @@ class BorrowAuthorityResource(Resource):
             message['message'] = 'user not exist'
             return
         
-        auths = BorrowAuthority.query.filter_by(user.id).all()
+        applies = ApplyFor.query.filter_by(user_id=user.id).all()
+        data = []
+        for app in applies:
+            data.append(app.to_json())
+        message['data'] = data
 
-    def _get_all_authorities(self, message):
-        auths = BorrowAuthority.query.filter(BorrowAuthority.end_time >= datetime.datetime.now())
+    def _get_all_authorities(self, message): #only available
+        auths = ApplyFor.query.filter(ApplyFor.end_time >= datetime.datetime.now())
         new_data = []
         for auth in auths:
             new_data.append(auth.to_json())
         message['data'] = new_data
+
     def _add_authority(self, username, doc_id_list, docclass_id_list, start_time, end_time, message):
         if username is None or (doc_id_list is None  and docclass_id_list is None) or end_time is None:
             message['error'] = 4
@@ -141,36 +159,72 @@ class BorrowAuthorityResource(Resource):
                     message['error'] = 16
                     message['message'] = 'no such file_id exist'
                 else:
-                    auth = BorrowAuthority(user.id, doc_id, None, start_time, end_time)
-                    db.session.add(auth)
+                    app = ApplyFor(user.id, doc_id, None, start_time, end_time)
+                    db.session.add(app)
         if docclass_id_list is not None:
             for docclass_id in docclass_id_list:
-                auth = BorrowAuthority(user.id, None, docclass_id, start_time, end_time)
-                db.session.add(auth)
+                app = ApplyFor(user.id, None, docclass_id, start_time, end_time)
+                db.session.add(app)
         db.session.commit()
 
-    def _del_authority(self, auth_id, message):
-        if auth_id is None:
+    def _del_authority(self, apply_id, username, message):
+        if apply_id is None:
             message['error'] = '10'
-            message['message'] = 'auth_id not provided'
-        auth = BorrowAuthority.query.get(auth_id)
-        if auth is not None:
-            db.session.delete(auth)
-            db.session.commit()
-        message['message'] = 'delete auth successful'
-    def _mod_authority(self, auth_id, end_time, message):
-        if auth_id is None or end_time is None:
+            message['message'] = 'apply_id not provided'
+        app = ApplyFor.query.get(apply_id)
+        if app is not None:
+            flag = False
+            if username == 'root':
+                flag = True
+            if not flag:
+                user = User.query.filter_by(username=username).first()
+                if user.id == app.user_id:
+                    flag = True
+            if flag:
+                db.session.delete(app)
+                db.session.commit()
+                message['message'] = 'delete auth successful'
+            else:
+                message['error'] = 1
+                message['message'] = 'has no privilage to delete'
+        else:
+            message['error'] = 22
+            message['message'] = 'no such apply_id exist'
+
+    """
+    def _mod_authority(self, apply_id, end_time, message):
+        if apply_id is None or end_time is None:
             message['error'] = 11
             message['message'] = 'auth id or end time not supported, cant modify'
             return
-        auth = BorrowAuthority.query.get(auth_id)
-        if auth is not None:
-            auth.end_time = end_time
+        app = ApplyFor.query.get(apply_id)
+        if app is not None:
+            app.end_time = end_time
             db.session.commit()
         message['message'] = 'mod end time successful'
+        """
 
+    def _approve_authority(self, apply_id, message):
+        if apply_id is None:
+            message['error'] = 22
+            message['message'] = 'no such apply_id exist'
+            return
+        app = ApplyFor.query.get(apply_id)
+        if app is not None:
+            if app.passed:
+                message['error'] = 23
+                message['message'] = 'this application has already been approved'
+            else:
+                auth = BorrowAuthority(app.user_id, app.doc_id, app.docclass_id, app.start_time, app.end_time)
+                db.session.add(auth)
+                ApplyFor.query.filter_by(id=app.id).update({ApplyFor.passed:True})
+                db.session.commit()
+                #mod passed to True
 
-
-
+                message['message'] = 'approve success.'
+        else:
+            message['error'] = 22
+            message['message'] = 'apply_id error'
+            
 
 
