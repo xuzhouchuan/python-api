@@ -106,23 +106,29 @@ class BorrowAuthorityResource(Resource):
             message['error'] = 4
             message['message'] = 'no to_username or doc_id, docclass_id, end_time'
             return
+        if end_time is None or end_time == '':
+            end_time = 'forever'
+        else:
+            end_time = end_time.replace('%20', ' ')
+
         if start_time is None:
             start_time = datetime.datetime.now()
         else:
+            start_time = start_time.replace('%20', ' ')
             try:
-                start_time = datetime.datetime.strptime(start_time, '%Y%m%d%H%M%S')
+                start_time = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
             except:
-                message['message'] += ' start time format error(%Y%m%d%H%M%S), to default now'
+                message['message'] += ' start time format error(%Y-%m-%d %H:%M:%S), to default now'
                 start_time = datetime.datetime.now()
         tmp_end_time = None
         try:
-            tmp_end_time = datetime.datetime.strptime(end_time, '%Y%m%d%H%M%S')
+            tmp_end_time = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
         except:
             if end_time == 'forever':
                 tmp_end_time = datetime.datetime.now() + datetime.timedelta(days=365*3) #3 * 365 * 24 * 60 * 60
             else:
                 message['error'] = 6
-                message['message'] += 'end time format error(%Y%m%d%H%M%S)'
+                message['message'] += 'end time format error(%Y-%m-%d %H:%M:%S)'
                 return
         end_time = tmp_end_time
         print start_time, '\t', end_time

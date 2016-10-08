@@ -198,9 +198,10 @@ class DocResource(Resource):
             return 
         name = args['username']
         res = []
+        docs = Doc.query.filter(Doc.id>=0).all()
         if name == 'root':
             #auths = BorrowAuthority.query.filter(BorrowAuthority.doc_id>=1).all()
-            docs = Doc.query.filter(Doc.id>=0).all()
+            #docs = Doc.query.filter(Doc.id>=0).all()
             for doc in docs:
                 res.append(doc.to_json())
 
@@ -208,18 +209,23 @@ class DocResource(Resource):
             auths = []
             user = User.query.filter_by(username=name).first()
             auths = BorrowAuthority.query.filter_by(user_id=user.id).all()
-            for au in auths:
-                if au.doc_id is None:
-                    pass
-                else:
-                    if au.end_time >= datetime.datetime.now() and au.start_time <= datetime.datetime.now():
-                        doc = Doc.query.get(au.doc_id)
-                        res.append(doc.to_json())
-                        """
-        docs = Doc.query.filter(Doc.id>=0).all()
-        for doc in docs:
-            res.append(doc.to_json())
-            """
+            for doc in docs:
+                flag = False
+                for au in auths:
+                    if flag == True:
+                        break
+                    if au.doc_id is None:
+                        pass
+                    else:
+                        if au.end_time >= datetime.datetime.now() and au.start_time <= datetime.datetime.now():
+                            if au.doc_id == doc.id:
+                                print au.doc_id, au.end_time
+                                flag = True
+                            #doc = Doc.query.get(au.doc_id)
+                            #res.append(doc.to_json())
+                if flag == False:
+                    doc.path = ""
+                res.append(doc.to_json())
         message['data'] = res
 
         

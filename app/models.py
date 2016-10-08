@@ -80,13 +80,17 @@ class Doc(db.Model):
         return '<Doc %s, %d, %s>' % (self.name, self.author_id, self.file_type)
 
     def to_json(self):
+        fn = ""
+        if self.path is not None and self.path != "":
+            fn = self.path.rsplit('/', 1)[1]
         return {'id' : self.id,
                 'name' : self.name,
                 'docclass_id' : self.docclass_id,
                 'file_type' : self.file_type,
                 'content' : self.content,
                 'author_id' : self.author_id,
-                'filesname' : self.path.rsplit('/', 1)[1]
+                'filesname' : fn
+                #'filesname' : (self.path == ""? "" : self.path.rsplit('/', 1)[1])
                }
 
 class Log(db.Model):
