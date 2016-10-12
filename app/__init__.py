@@ -36,10 +36,14 @@ mysql.init_app(app)
 
 
 from models import *
-from resource import UserResource, DocClassResource, DocResource, BorrowAuthorityResource, ViewLog, ApplyForResource
+from resource import UserResource, DocClassResource, DocClassListResource, DocResource, BorrowAuthorityResource, ViewLog, ApplyForResource, VolumneResource, VolumneListResource, DocListResource
 api.add_resource(UserResource,'/user')
-api.add_resource(DocClassResource, '/docclass')
-api.add_resource(DocResource, '/doc')
+api.add_resource(DocClassResource, '/docclass/<int:dclass_id>')
+api.add_resource(DocClassListResource, '/docclass')
+api.add_resource(VolumneResource, '/volumne/<int:v_id>')
+api.add_resource(VolumneListResource, '/volumne')
+api.add_resource(DocResource, '/doc/<int:d_id>')
+api.add_resource(DocListResource, '/doc')
 api.add_resource(BorrowAuthorityResource, '/borrow')
 api.add_resource(ViewLog, '/viewlog')
 api.add_resource(ApplyForResource, '/apply')

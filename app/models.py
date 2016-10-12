@@ -20,6 +20,8 @@ class User(db.Model):
     password = db.Column(db.String(128))
     createid = db.Column(db.Integer, db.ForeignKey('user.id'))
 
+    #__table_args__ = {'mysql_engine':'InnoDB'}
+
     def __init__(self, username, password, createid):
         self.username = username
         self.password = password
@@ -34,17 +36,25 @@ class User(db.Model):
                 'create_user_id' : self.createid
                }
 
+#门类，树状层级目录
 class DocClass(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(256))
     parent_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
-    customizable = db.Column(db.Boolean)
-    docs = db.relationship('Doc', backref=db.backref('docclass', lazy='joined'), lazy='dynamic')
+    #docclass，是Volumne对象的一个属性，可以通过Volumne.docclass来获取这个volumne的docclass了
+    volumnes = db.relationship('Volumne', backref=db.backref('docclass', lazy='joined'), lazy='dynamic')
+    properties = db.relationship('VolumneProperty', cascade="all,delete", backref=db.backref('docclass', lazy='joined'), lazy='dynamic')
+    level = db.Column(db.Integer)
+    #0:旧的形式；1:新的形式，卷是不存在的，为了 统一形式加了这一层
+    type = db.Column(db.Integer)
 
-    def __init__(self, name, parent_id, customizable):
+    #__table_args__ = (db.UniqueConstraint('parent_id', 'name', name='_parent_id_name_uc'), {'mysql_engine': 'InnoDB'})
+
+    def __init__(self, name, parent_id, level, type):
         self.name = name
         self.parent_id = parent_id
-        self.customizable = customizable
+        self.level = level
+        self.type = type
     
     def __repr__(self):
         return '<DocClass %r, %d>' % (self.name, self.parent_id)
@@ -53,44 +63,162 @@ class DocClass(db.Model):
         return {'id' : self.id,
                 'name' : self.name,
                 'parent_id' : self.parent_id,
-                'customizable' : self.customizable
+                'level' : self.level,
+                'type' : self.type
                 }
 
-class Doc(db.Model):
+#卷
+class Volumne(db.Model): 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(256))
+    name = db.Column(db.String(512))
     docclass_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
-    path = db.Column(db.String(1024))
-    md5 = db.Column(db.String(64))
-    file_type = db.Column(db.String(32))
-    content = db.Column(db.PickleType)
-    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    upload_time = db.Column(db.DateTime)
+    #0:旧的形式；1:新的形式，卷是不存在的，为了 统一形式加了这一层
+    type = db.Column(db.Integer, default=0)
+    #volumne成了Doc的一个属性
+    docs = db.relationship('Doc', backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
+    values = db.relationship('VolumneValue', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
+    properties = db.relationship('DocProperty', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
 
-    def __init__(self, name, docclass_id, path, file_type, content, author_id, upload_time):
+    #__table_args__ = (db.UniqueConstraint('docclass_id', 'name', name='_docclass_id_name_uc'),{'mysql_engine': 'InnoDB'})
+
+    def __init__(self, name, docclass_id, type=0):
         self.name = name
         self.docclass_id = docclass_id
-        self.path = path
-        self.file_type = file_type
-        self.content = content
-        self.author_id = author_id
-        self.upload_time = upload_time
-
-    def __repr__(self):
-        return '<Doc %s, %d, %s>' % (self.name, self.author_id, self.file_type)
+        self.type = type
 
     def to_json(self):
-        fn = ""
-        if self.path is not None and self.path != "":
-            fn = self.path.rsplit('/', 1)[1]
         return {'id' : self.id,
                 'name' : self.name,
                 'docclass_id' : self.docclass_id,
-                'file_type' : self.file_type,
-                'content' : self.content,
-                'author_id' : self.author_id,
-                'filesname' : fn
-                #'filesname' : (self.path == ""? "" : self.path.rsplit('/', 1)[1])
+                'type' : self.type
+               }
+
+#件
+class Doc(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(512))
+    volumne_id = db.Column(db.Integer, db.ForeignKey('volumne.id'))
+    path = db.Column(db.String(2048))
+    #type意义和Volumne中的type一样，只是冗余存储
+    type = db.Column(db.Integer, default=0)
+    uploader_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    upload_time = db.Column(db.DateTime)
+    values = db.relationship('DocValue', cascade="all,delete", backref=db.backref('doc', lazy='joined'), lazy='dynamic')
+
+    #__table_args__ = (db.UniqueConstraint('volumne_id', 'name', name='_volumne_id_name_uc'), {'mysql_engine': 'InnoDB'})
+
+    def __init__(self, name, volumne_id, path, type, uploader_id, upload_time):
+        self.name = name
+        self.volumne_id = volumne_id
+        self.path = path
+        self.type = type
+        self.uploader_id = uploader_id
+        self.upload_time = upload_time
+
+    def __repr__(self):
+        return '<Doc %s, %d, %d>' % (self.name, self.id, self.volumne_id)
+
+    def to_json(self):
+        return {'id' : self.id,
+                'name' : self.name,
+                'volumne_id' : self.volumne_id,
+                'volume' : self.volumne.name,
+                'path' : self.path,
+                'uploader' : self.uploader_id,
+                'upload_time' : self.upload_time.strftime('%Y%m%d %H:%M:%S')
+               }
+
+class VolumneProperty(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(256))
+    docclass_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
+    order = db.Column(db.Integer)
+
+    #__table_args__ = {'mysql_engine':'InnoDB'}
+
+    def __init__(self, name, docclass_id, order):
+        self.name = name
+        self.docclass_id = docclass_id
+        self.order = order
+
+    def to_json(self):
+        return {'id': self.id,
+                'name': self.name,
+                'docclass_id': self.docclass_id,
+                'order': self.order
+               }
+
+class DocProperty(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(256))
+    volumne_id = db.Column(db.Integer, db.ForeignKey('volumne.id'))
+    order = db.Column(db.Integer)
+
+    #__table_args__ = {'mysql_engine':'InnoDB'}
+
+    def __init__(self, name, volumne_id, order):
+        self.name = name
+        self.volumne_id = volumne_id
+        self.order = order
+
+    def to_json(self):
+        return {'id': self.id,
+                'name': self.name,
+                'volumne_id': self.volumne_id,
+                'order': self.order
+               }
+
+class VolumneValue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    value = db.Column(db.String(1024))
+    property_id = db.Column(db.Integer, db.ForeignKey('volumne_property.id'))
+    volumne_id = db.Column(db.Integer, db.ForeignKey('volumne.id'))
+    property_name = db.Column(db.String(1024))
+    order = db.Column(db.Integer)
+
+    #__table_args__ = {'mysql_engine':'InnoDB'}
+
+    def __init__(self, value, property_id, volumne_id, property_name, order):
+        self.value= value
+        self.property_id = property_id
+        self.volumne_id = volumne_id
+        self.property_name = property_name
+        self.order = order
+
+    def to_json(self):
+        return {'id' : self.id,
+                'property_name': self.property_name,
+                'property_id': self.property_id,
+                'value': self.value,
+                'volumne_id': self.volumne_id,
+                'order': self.order
+               }
+
+
+class DocValue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    value = db.Column(db.String(1024))
+    property_id = db.Column(db.Integer, db.ForeignKey('doc_property.id'))
+    doc_id = db.Column(db.Integer, db.ForeignKey('doc.id'))
+    property_name = db.Column(db.String(1024))
+    order = db.Column(db.Integer)
+
+    #__table_args__ = {'mysql_engine':'InnoDB'}
+
+    def __init__(self, value, property_id, doc_id, property_name, order):
+        self.value= value
+        self.property_id = property_id
+        self.doc_id = doc_id
+        self.property_name = property_name
+        self.order = order
+    
+    def to_json(self):
+        return {'id': self.id,
+                'value' : self.value,
+                'property_id': self.property_id,
+                'property_name': self.property_name,
+                'order': self.order,
+                'doc_id': self.doc_id
                }
 
 class Log(db.Model):
@@ -201,10 +329,12 @@ def init_db():
     db.session.add(admin)
     db.session.add(test)
     if True:
-        name = [u'最高检', u'办公厅', u'检察长办公室', u'秘书处', u'人大代表联络处', u'新规则文书档案', u'老规则文书档案']
-        parent = [1, 1, 2, 2, 2, 3, 3]
+        name = ['root', u'最高检', u'办公厅', u'检察长办公室', u'秘书处', u'人大代表联络处', u'新规则文书档案', u'老规则文书档案']
+        parent = [1, 1, 2, 3, 3, 3, 4, 4]
+        level = [0, 1, 2, 3, 3, 3, 4, 4]
+        type = [None, None, None, None, None, None, 0, 1]
         for i in range(0, len(name)):
-            dep = DocClass(name[i], parent[i], True)
+            dep = DocClass(name[i], parent[i], level[i], type[i])
             db.session.add(dep)
             db.session.commit()
     else:

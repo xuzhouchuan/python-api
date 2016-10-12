@@ -10,223 +10,127 @@ File: doc.py
 Author: AngelClover(AngelClover@aliyun.com)
 Date: 2016/09/05 00:37:00
 """
-from flask_restful import Resource, reqparse
-import copy
-import os
-import time
 import datetime
+import os.path
+import re
+from flask_restful import Resource, reqparse, abort
 from flask import jsonify
-import werkzeug
-from werkzeug import secure_filename
 from app import db
-from app.models import DocClass, Doc, User, BorrowAuthority, Log
-from flask import send_file
+from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, DocValue
 
-SAVE_DIR = './upload_files/'
-ALLOWED_EXTENSIONS = set(['txt','pdf','png','jpg','jpeg','gif','doc','docx','xls','xlsx'])
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.',1)[1] in ALLOWED_EXTENSIONS
+UPLOAD_DIR ="upload_document"
+
+def secure_filename(file_name):
+    secure_name = re.sub('[" \-~\|\-/]', '_', file_name)
+    return secure_name
+
+class DocListResource(Resource):
+    def __init__(self):
+        pass
+    def get(self):
+        pass
+    
+    def post(self):
+        #add a doc
+        parser = reqparse.RequestParser(bundle_errors=True)
+        parser.add_argument('name', required=True)
+        parser.add_argument('volumne_id', type=int, required=True)
+        parser.add_argument('values', action='append', default=[])
+        args = parser.parse_args()
+
+        vol = Volumne.query.get(args['volumne_id'])
+        if vol is None:
+            abort(403, message='volumne id:{} not exist'.format(args['volumne_id']))
+
+        maybe_exist = Doc.query.filter_by(volumne_id=args['volumne_id'],
+                name=args['name']).first()
+        if maybe_exist is not None:
+            abort(403, message=u'volumne:{} already has the same name doc:{}'.format(vol.name, args['name']))
+
+        path = os.path.join(UPLOAD_DIR, secure_filename(vol.name), secure_filename(args['name']))
+
+        new_doc = Doc(args['name'], vol.id, path, vol.type, 1, datetime.datetime.now())
         
+        db.session.add(new_doc)
+        db.session.commit()
+        #upload values
+        for k_v in args['values']:
+            k, v = k_v.split('=')
+            doc_prop = DocProperty.query.filter_by(name=k, volumne_id=vol.id).first()
+            if doc_prop is None:
+                #if property not exist, ignore it, TODO
+                continue
+            old_value = DocValue.query.filter_by(doc_id=new_doc.id, property_id=doc_prop.id).first()
+            if old_value is not None:
+                old_value.value = v
+            else:
+                new_value = DocValue(v, doc_prop.id, new_doc.id, doc_prop.name, doc_prop.order)
+                db.session.add(new_value)
+        db.session.commit()
+        #upload files
+        #TODO
+
+        return new_doc.to_json()
+
 
 class DocResource(Resource):
     RETURN_MESSAGE = {'error' : 0, 'message' : '', 'data' : ''}
     def __init__(self):
         pass
 
-    def _parse_request(self):
+    def get(self, d_id):
+        #get a doc
+        doc = Doc.query.get(d_id)
+        if doc is None:
+            abort(404, message="doc id:{} not exist".format(d_id))
+
+        result = doc.to_json()
+        result['values'] = []
+        result['files'] = []
+        #property values
+        for v in doc.values:
+            result['values'].append(v.to_json())
+        result['values'].sort(key=lambda e:e['order'])
+        #files
+        #TODO
+        return result, 200
+
+    def put(self, d_id):
         parser = reqparse.RequestParser(bundle_errors=True)
-        parser.add_argument('action', required=True)
-        parser.add_argument('file_id')
-        parser.add_argument('content')
-        parser.add_argument('file', type=werkzeug.datastructures.FileStorage, location=['files', 'form'])
-        parser.add_argument('docclass_id', type=int)
-        parser.add_argument('username', required=True)
-        return parser.parse_args()
+        parser.add_argument('values', action='append', default=[])
+        args = parser.parse_args()
 
-    def get(self):
-        args = self._parse_request()
-        message = copy.deepcopy(DocResource.RETURN_MESSAGE)
-        if args['action'] == 'upload':
-            message['error'] = 1
-            message['message'] = 'method can\'t be used as post'
-        else:
-            self._process_action(args, message)
-        if args['action'] != 'get':
-            return jsonify(error=message['error'], message=message['message'], data=message['data'])
-        else:
-            if message['error'] != 0:
-                return message, 412
+        doc = Doc.query.get(d_id)
+        if doc is None:
+            abort(404, message="doc id:{} not exist".format(d_id))
 
-            user = User.query.filter_by(username=args['username']).first()
-            log = Log(user.id, datetime.datetime.now(), "download", "filename:%s" % args['file_name'], "")
-            db.session.add(log)
-            db.session.commit()
-
-            fh = open(args['path'], 'rb')
-            return send_file(fh, attachment_filename = args['file_name'], as_attachment=True)
-    def post(self):
-        args = self._parse_request()
-        print args
-        message = copy.deepcopy(DocResource.RETURN_MESSAGE)
-        self._process_action(args, message)
-        if args['action'] != 'get':
-            return jsonify(error=message['error'], message=message['message'], data=message['data'])
-        else:
-            if message['error'] != 0:
-                return message, 412
-            fh = open(args['path'], 'rb')
-            return send_file(fh, attachment_filename = args['file_name'], as_attachment=True)
-
-    def _process_action(self, args, message):
-        if 'action' not in args or args['action'] is None:
-            message['error'] = 2
-            message['message'] = 'no action provided'
-        elif args['action'] == 'upload':
-            self._upload(args, message)
-        elif args['action'] == 'get':
-            self._get_doc(args, message)
-        elif args['action'] == 'get_info':
-            self._get_doc_info(args, message)
-        elif args['action'] == 'del':
-            self._del_doc(args, message)
-        elif args['action'] == 'get_all':
-            self._get_all_doc(args, message)
-
-    def _upload(self, args, message):
-        if 'file' not in args or args['file'] is None:
-            message['error'] = 3
-            message['message'] = 'no file selected to upload'
-            return
-        if 'docclass_id' not in args or args['docclass_id'] is None:
-            message['error'] = 8
-            message['message'] = 'no docclass_id provided'
-            return
-        file = args['file']
-        file_name = secure_filename(file.filename)
-        if not allowed_file(file_name):
-            message['error'] = 4
-            message['message'] = 'not support file_type, support file type:%s' % ','.join(ALLOWED_EXTENSIONS)
-            return
-        extension = file_name.rsplit('.', 1)[1].lower()
-        user = User.query.filter_by(username=args['username']).first()
-        if user is None:
-            message['error'] = 5
-            message['message'] = 'user not exist:%s' % args['username']
-            return
-        user_id = user.id
-        docclazz = DocClass.query.get(args['docclass_id'])
-        if docclazz is None:
-            message['error'] = 6
-            message['message'] = 'docclass not exist:%d' % args['docclass_id']
-            return
-        docclazz_id = docclazz.id
-        save_name = '%d_%s_%s' % (docclazz.id, time.strftime('%Y%m%d%H%M%S',time.localtime(time.time())), file_name)
-        save_dir = os.path.abspath(SAVE_DIR)
-        if not os.path.isdir(save_dir):
-            try:
-                os.makedir(save_dir) 
-            except:
-                print "make dir :%s error" % SAVE_DIR
-        path = os.path.join(save_dir, save_name)
-        file.save(path)
-        new_doc = Doc(file_name, docclazz_id, path, extension, None, user_id, datetime.datetime.now())
-        db.session.add(new_doc)
+        for k_v in args['values']:
+            k, v = k_v.split('=')
+            changed = False
+            for vals in doc.values:
+                if vals.property_name == k:
+                    vals.value = v
+                    changed = True
+                    break
+            if not changed:
+                prop = DocProperty.query.filter_by(name=k, volumne_id = doc.volumne.id).first()
+                if prop is None:
+                    continue
+                new_value = DocValue(v, prop.id, doc.id, prop.name, prop.order)
+                db.session.add(new_value)
         db.session.commit()
-        message['error'] = 0
-        message['message'] = 'upload file successful'
+        #modify upload file #TODO
+        return doc.to_json(), 200
 
-    def _get_doc(self, args, message):
-        if 'file_id' not in args or args['file_id'] is None:
-            message['error'] = 7
-            message['message'] = 'no file name provided'
-            return
-        file_id = args['file_id']
-        doc = Doc.query.get(file_id)
+    def delete(self, d_id):
+        doc = Doc.query.get(d_id)
         if doc is None:
-            message['error'] = 9
-            message['message'] = 'file not exist in database'
-            return
-        args['file_name'] = doc.name
-        args['path'] = doc.path
-        binary = None
-        with open(doc.path, 'r') as fh:
-            binary = fh.read()
-
-        message['data'] = binary
-        message['message'] = 'success'
-    def _get_doc_info(self, args, message):
-        if 'file_id' not in args or args['file_id'] is None:
-            message['error'] = 7
-            message['message'] = 'no file name provided'
-            return
-        file_id = args['file_id']
-        doc = Doc.query.get(file_id)
-        if doc is None:
-            messagy['error'] = 9
-            message['message'] = 'file not exist in database'
-            return
-        args['file_name'] = doc.name
-        args['path'] = doc.path
-        message['data'] = doc.to_json()
-        message['message'] = 'get info successful'
-
-    def _del_doc(self, args, message):
-        if 'file_id' not in args or args['file_id'] is None:
-            message['error'] = 7
-            message['message'] = 'no file name provided'
-            return
-        file_id = args['file_id']
-        doc = Doc.query.get(file_id)
-        if doc is None:
-            message['error'] = 9
-            message['message'] = 'file not exist in database'
-            return
-        path = doc.path
-        doc_name = doc.name
+            abort(404, message="doc id:{} not exist".format(d_id))
+        #TODO rm -rf path
         db.session.delete(doc)
         db.session.commit()
-        print path
-        if path is not None:
-            os.remove(path)
-        message['message'] = 'delete file:%s successful' % doc_name
-
-    def _get_all_doc(self, args, message):
-        if 'username' not in args or args['username'] is None:
-            message['error'] = 10
-            message['message'] = 'username not provided'
-            return 
-        name = args['username']
-        res = []
-        docs = Doc.query.filter(Doc.id>=0).all()
-        if name == 'root':
-            #auths = BorrowAuthority.query.filter(BorrowAuthority.doc_id>=1).all()
-            #docs = Doc.query.filter(Doc.id>=0).all()
-            for doc in docs:
-                res.append(doc.to_json())
-
-        else:
-            auths = []
-            user = User.query.filter_by(username=name).first()
-            auths = BorrowAuthority.query.filter_by(user_id=user.id).all()
-            for doc in docs:
-                flag = False
-                for au in auths:
-                    if flag == True:
-                        break
-                    if au.doc_id is None:
-                        pass
-                    else:
-                        if au.end_time >= datetime.datetime.now() and au.start_time <= datetime.datetime.now():
-                            if au.doc_id == doc.id:
-                                print au.doc_id, au.end_time
-                                flag = True
-                            #doc = Doc.query.get(au.doc_id)
-                            #res.append(doc.to_json())
-                if flag == False:
-                    doc.path = ""
-                res.append(doc.to_json())
-        message['data'] = res
+        return '', 204
 
         
 
