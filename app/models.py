@@ -11,8 +11,11 @@ Author: AngelClover(AngelClover@aliyun.com)
 Date: 2016/09/07 13:26:06
 """
 
-from app import db
+from passlib.apps import custom_app_context as pwd_context
+from app import db, app
 from datetime import datetime
+from itsdangerous import (TimedJSONWebSignatureSerializer 
+                          as Serializer, BadSignature, SignatureExpired)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -35,6 +38,24 @@ class User(db.Model):
                 'name' : self.username,
                 'create_user_id' : self.createid
                }
+    def verify_password(self, password):
+        return password == self.password
+
+    def generate_auth_token(self, expiration=600):
+        s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
+        return s.dumps({'id' : self.id})
+
+    @staticmethod
+    def verify_auth_token(token):
+        s = Serializer(app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return None    # valid token, but expired
+        except BadSignature:
+            return None    # invalid token
+        user = User.query.get(data['id'])
+        return user
 
 #门类，树状层级目录
 class DocClass(db.Model):

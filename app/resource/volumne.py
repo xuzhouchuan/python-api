@@ -13,8 +13,8 @@ Date: 2016/10/11 16:42:17
 from flask_restful import Resource, reqparse, abort
 import copy
 import json
-from flask import jsonify
-from app import db
+from flask import jsonify, g
+from app import db, auth
 from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc
 
 
@@ -23,6 +23,8 @@ class VolumneListResource(Resource):
         pass
     def get(self):
         pass
+
+    @auth.login_required
     def post(self):
         #add a volumne
         parser = reqparse.RequestParser(bundle_errors=True)
@@ -31,6 +33,9 @@ class VolumneListResource(Resource):
         parser.add_argument('doc_properties', action='append', default=[])
         parser.add_argument('values', action='append', default=[])
         args = parser.parse_args()
+
+        if g.user.id != 1:
+            abort(403, message='not admin')
 
         doc_class = DocClass.query.get(args['docclass_id'])
         if doc_class is None or doc_class.level != 4:
@@ -93,12 +98,16 @@ class VolumneResource(Resource):
 
         return result, 200
 
+    @auth.login_required
     def put(self, v_id):
         #modify a volumne
         parser = reqparse.RequestParser(bundle_errors=True)
         parser.add_argument('name')
         parser.add_argument('values', action='append', default=[])
         args = parser.parse_args()
+
+        if g.user.id != 1:
+            abort(403, message='not admin')
 
         vol = Volumne.query.get(v_id)
         if vol is None:
@@ -121,8 +130,10 @@ class VolumneResource(Resource):
                 db.session.add(new_value)
             db.session.commit()
 
-
+    @auth.login_required
     def delete(self, v_id):
+        if g.user.id != 1:
+            abort(403, message='not admin')
         #delete a volumne
         vol = Volumne.query.get(v_id)
         if vol is None:

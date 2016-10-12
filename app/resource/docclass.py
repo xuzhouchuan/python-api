@@ -13,8 +13,8 @@ Date: 2016/09/05 00:47:36
 from flask_restful import Resource, reqparse, abort
 import copy
 import json
-from flask import jsonify
-from app import db
+from flask import jsonify, g
+from app import db, auth
 from app.models import DocClass, Volumne, VolumneProperty
 
 class DocClassListResource(Resource):
@@ -30,6 +30,7 @@ class DocClassListResource(Resource):
                 result.append(item.to_json())
         return jsonify({'docclass' : result})
 
+    @auth.login_required
     def post(self):
         #add a docclass
         parser = reqparse.RequestParser(bundle_errors=True)
@@ -38,6 +39,9 @@ class DocClassListResource(Resource):
         parser.add_argument('properties', action='append')
         parser.add_argument('type', type=int)
         args = parser.parse_args()
+
+        if g.user.id != 1:
+            abort(403, message='not admin')
 
         #find parent docclass
         parent = DocClass.query.get(args['parent_id']) 
@@ -89,13 +93,17 @@ class DocClassResource(Resource):
             result['volumnes'].append(v.to_json())
 
         return result, 200
-
+    
+    @auth.login_required
     def put(self, dclass_id):
         #modify doc class(cn't modify  properties)
         parser = reqparse.RequestParser(bundle_errors=True)
         parser.add_argument('name')
         parser.add_argument('type', type=int)
         args = parser.parse_args()
+
+        if g.user.id != 1:
+            abort(403, message='not admin')
 
         doc_clazz = DocClass.query.get(dclass_id)
         if doc_clazz is None:
@@ -112,7 +120,10 @@ class DocClassResource(Resource):
         db.session.commit()
         return doc_clazz.to_json(), 200
 
+    @auth.login_required
     def delete(self, dclass_id):
+        if g.user.id != 1:
+            abort(403, message='not admin')
         #delete docclass
         docclass = DocClass.query.get(dclass_id)
         if docclass is None:
