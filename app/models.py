@@ -332,7 +332,6 @@ class ApplyFor(db.Model):
                }
 
 def init_db():
-    db.drop_all()
     db.create_all()
     db.session.commit()
     table_names = []
@@ -375,5 +374,9 @@ def init_db():
     print users
     classs = DocClass.query.all()
     print classs
+
+def drop_db():
+    db.drop_all()
+
 if __name__ == '__main__':
     pass
