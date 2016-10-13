@@ -118,6 +118,8 @@ class DocResource(Resource):
         files = [f for f in os.listdir(doc.path) if os.path.isfile(os.path.join(doc.path, f))]
         for file_name in files:
             real_name = os.path.join(doc.path, f)
+            real_name = real_name.split('/', 1)
+            real_name = '%s/%s' % ('files', real_name[1])
             result['files'].append(real_name)
         return result, 200
 
