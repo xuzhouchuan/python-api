@@ -13,9 +13,10 @@ Date: 2016/10/11 16:42:17
 from flask_restful import Resource, reqparse, abort
 import copy
 import json
+import datetime
 from flask import jsonify, g
 from app import db, auth
-from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc
+from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, BorrowAuthority
 
 
 class VolumneListResource(Resource):
@@ -75,6 +76,7 @@ class VolumneResource(Resource):
     def __init__(self):
         pass
 
+    @auth.login_required
     def get(self, v_id):
         #get a volumne
         vol = Volumne.query.get(v_id)
@@ -82,19 +84,28 @@ class VolumneResource(Resource):
             abort(403, message='volumne id:{} not exist'.format(vol))
         result = vol.to_json()
         result['docs'] = []
-        result['values'] = []
         result['doc_properties'] = []
         #docs
         for doc in vol.docs:
             result['docs'].append(doc.to_json())
-        #values
-        for v in vol.values:
-            result['values'].append(v.to_json())
-            result['values'].sort(key=lambda e:e['order'])
         #doc_props
         for d_prop in vol.properties:
             result['doc_properties'].append(d_prop.to_json())
             result['doc_properties'].sort(key=lambda e:e['order'])
+        #authority
+        result['auth'] = False
+        user_id = g.user.id
+        if user_id == 1:
+            result['auth'] = True
+        else:
+            borrow_auth = BorrowAuthority.query.filter_by(user_id=user_id, volumne_id=v_id).first()
+            if borrow_auth is not None:
+                now = datetime.datetime.now()
+                if borrow_auth.start_time <= now and now <= borrow_auth.end_time:
+                    result['auth'] = True
+                else:
+                    db.session.delete(borrow_auth)
+                    db.session.commit()
 
         return result, 200
 

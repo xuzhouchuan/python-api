@@ -19,7 +19,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask.ext.httpauth import HTTPBasicAuth
 import MySQLdb.cursors
 from functools import wraps
-from session import Session
+import time
+import datetime
 #from app.models import Log
 
 
@@ -28,7 +29,6 @@ api = Api(app)
 mysql = MySQL(cursorclass=MySQLdb.cursors.DictCursor)
 db = SQLAlchemy(app, use_native_unicode='utf8')
 auth = HTTPBasicAuth()
-session = Session()
 
 app.config['MYSQL_DATABASE_USER'] = 'root'
 app.config['MYSQL_DATABASE_PASSWORD'] = 'root'
@@ -48,19 +48,18 @@ def admin_required(f):
     return wrapper
 
 from models import *
-from resource import UserResource, DocClassResource, DocClassListResource, DocResource, BorrowAuthorityResource, ViewLog, ApplyForResource, VolumneResource, VolumneListResource, DocListResource
-api.add_resource(UserResource,'/user')
+from resource import UserResource, DocClassResource, DocClassListResource, DocResource, ViewLog, ApplyForResource, VolumneResource, VolumneListResource, DocListResource, UserListResource, ApplyForListResource
+api.add_resource(UserResource, '/user/<int:u_id>')
+api.add_resource(UserListResource, '/user')
 api.add_resource(DocClassResource, '/docclass/<int:dclass_id>')
 api.add_resource(DocClassListResource, '/docclass')
 api.add_resource(VolumneResource, '/volumne/<int:v_id>')
 api.add_resource(VolumneListResource, '/volumne')
 api.add_resource(DocResource, '/doc/<int:d_id>')
+api.add_resource(ApplyForResource, '/apply/<int:a_id>')
+api.add_resource(ApplyForListResource, '/apply')
 api.add_resource(DocListResource, '/doc')
-api.add_resource(BorrowAuthorityResource, '/borrow')
 api.add_resource(ViewLog, '/viewlog')
-api.add_resource(ApplyForResource, '/apply')
-
-session.check_thread()
 
 @app.after_request
 def after_request(response):
@@ -69,36 +68,6 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
-@app.route('/is_login', methods=['POST', 'GET'])
-def is_login():
-    return jsonify(error=0,
-                   data=session.valid_login_user(request.form['token']))
-
-@app.route('/login', methods=['POST'])
-def login():
-    message = {'error' : 0, 'message' : '', 'data' : {}}
-    token = check_login(request.form['username'], request.form['password'])
-    if token is not None:
-        message['message'] = 'successful login'
-        message['data']['token'] = token
-    else:
-        message['error'] = 1
-        message['message'] = 'invalid username or uncorrect password'
-    
-    user = User.query.filter_by(username=request.form['username']).first()
-    log = Log(user.id, datetime.now(), "login", "", "");
-    db.session.add(log)
-    db.session.commit()
-
-    return jsonify(message)
-
-def check_login(name, password):
-    user = User.query.filter_by(username=name, password=password).first()
-    if user is None:
-        return None
-    token = session.add_user(name)
-
-    return token
 
 @auth.verify_password
 def verify_password(username_or_token, password):
@@ -113,30 +82,76 @@ def verify_password(username_or_token, password):
     return True
 
 @app.route('/api/add_user', methods=['POST'])
+@auth.login_required
 def new_user():
+    if g.user.id != 1:
+        return 'not root user, cant add user', 403
     username = request.json.get('username')
     password = request.json.get('password')
     if username is None or password is None:
-        abort(400)    # missing arguments
+        return 'username:{}, passowrd:{}'.format(username, password), 400    # missing arguments
     if User.query.filter_by(username=username).first() is not None:
-        abort(400)    # existing user
-    user = User(username=username)
-    user.hash_password(password)
+        return 'user:{} already exist'.format(username), 400    # existing user
+    user = User(username, password, 1)
+    #user.hash_password(password)
     db.session.add(user)
     db.session.commit()
-    return (jsonify({'username': user.username}), 201,
-            {'Location': url_for('get_user', id=user.id, _external=True)})
+    return jsonify(user.to_json())
 
-@app.route('/api/token')
+@app.route('/api/token', methods=['POST', 'GET'])
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token(600)
     return jsonify({'token': token.decode('ascii'), 'duration': 600})
 
-def admin_required(f):
-    def wrapper(*args, **kw):
-        print "xzctest"
-        if (g.user.id != 1):
-            abort(403, message="must be admin|root user")
-        return f(*args, **kw)
-    return wrapper
+@app.route('/api/auth/list', methods=['POST', 'GET'])
+@auth.login_required
+def list_authority():
+    if g.user.id != 1:
+        return 'not root user, cant apply authority', 403
+
+    result = {'authorities' : [], 'applyfors' : []}
+    auths = BorrowAuthority.query.all()
+    for a in auths:
+        result['authorities'].append(a.to_json())
+    result['authorities'].sort(key=lambda e:e['id'], reverse=True)
+    applys = ApplyFor.query.all()
+    for apl in applys:
+        result['applyfors'].append(apl.to_json())
+    result['applyfors'].sort(key=lambda e:e['id'], reverse=True)
+    print "test"
+    return jsonify(result), 200
+
+@app.route('/api/auth/authorize', methods=['GET']) 
+@auth.login_required
+def apply_authority():
+    if g.user.id != 1:
+        return 'not root user, cant apply authority', 403
+    
+    apply_for_id = request.args.get('apply_for_id', None)
+    action = request.args.get('action', None)
+    if apply_for_id is None or action is None:
+        return 'no apply for id or no action', 400
+    apply_for = ApplyFor.query.get(apply_for_id)
+    if apply_for is None:
+        return 'no such a apply for, id is:{}'.format(apply_for_id), 400
+    if action == 'deny':
+        apply_for.denied = True
+        db.session.commit()
+        return '', 204
+    if action == 'accept':
+        user_id = apply_for.user_id
+        vol_id = apply_for.volumne_id
+        start_t = apply_for.start_time
+        end_t = apply_for.end_time
+        #insert in to BorrowAuthority
+        borrow_auth = BorrowAuthority(user_id,
+                vol_id,
+                start_t,
+                end_t)
+        db.session.add(borrow_auth)
+        #del in ApplyFor
+        db.session.delete(apply_for)
+        db.session.commit()
+        return '', 204
+    

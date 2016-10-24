@@ -10,98 +10,92 @@ File: user.py
 Author: AngelClover(AngelClover@aliyun.com)
 Date: 2016/09/04 21:49:09
 """
-from flask_restful import Resource, reqparse
+from flask_restful import Resource, reqparse, abort
+from flask import g, jsonify
 import copy
 import json
 
 from app.models import User
-from app import db
+from app import db, auth
 
-
-class UserResource(Resource):
-    RETURN_MESSAGE = {'error' : 0, 'message' : '', 'data' : ''}
+class UserListResource(Resource):
     def __init__(self):
         pass
-    def post(self):
-        parser = reqparse.RequestParser(bundle_errors=True)
-        parser.add_argument('action', required=True)
-        parser.add_argument('username', required=True)
-        parser.add_argument('password')
-        parser.add_argument('create_user')
-        args = parser.parse_args()
-        message = copy.deepcopy(UserResource.RETURN_MESSAGE)
 
-        return self.process_action(args, message), 200
-
+    @auth.login_required
     def get(self):
-        parser = reqparse.RequestParser(bundle_errors=True)
-        parser.add_argument('action', required=True)
-        parser.add_argument('username', required=True)
-        parser.add_argument('password')
-        parser.add_argument('create_user')
-        args = parser.parse_args()
-        message = copy.deepcopy(UserResource.RETURN_MESSAGE)
-        return self.process_action(args, message), 200
-
-    def process_action(self, args, message):
-        username = args['username']
-        if args['action'] == 'add':
-            if 'password' not in args or 'create_user' not in args:
-                message['error'] = 2
-                message['message'] = 'not password or create_user'
-            else:
-                self.add_user(username, args['password'], args['create_user'], message)
-        elif args['action'] == 'del':
-            self.del_user(username, message)
-        elif args['action'] == 'get':
-            self.get_user(username, message)
-        elif args['action'] == 'get_all':
-            self.get_all_user(args, message)
-        else:
-            message['error'] = 1
-            message['message'] = 'action not support'
-        return message
-    
-    def get_user(self, username, message):
-        user = User.query.filter_by(username=username).first()
-        if user is None:
-            message['error'] = 3
-            message['message'] = 'no such user with username:' + username
-            return
-        message['data'] = user.to_json()
-
-    def del_user(self, username, message):
-        user = User.query.filter_by(username=username).first()
-        if user is not None:
-            db.session.delete(user)
-            db.session.commit()
-
-    def add_user(self, username, password, create_user_name, message):
-        user = User.query.filter_by(username=username).first()
-        create_user = User.query.filter_by(username=create_user_name).first()
-        if create_user is None:
-            message['error'] = 4
-            message['message'] = 'create_user:%s not exist' % create_user
-            return
-        if user is not None:
-            message['error'] = 5
-            message['message'] = 'user name:%s already exist' % username
-            return
-        new_user = User(username, password, create_user.id)
-        db.session.add(new_user)
-        db.session.commit()
-        
-        print "INSERT INTO user(name, pass, createid) VALUES ('%s', '%s', %s)" \
-                % (username, password, create_user_name)
-        message['messsage'] = 'add user successful'
-    def get_all_user(self, args, message):
-        users = User.query.all()
-        data = []
+        if g.user.id != 1:
+            abort(403, message='not root user')
+        users = User.query.all() 
+        result = []
         for user in users:
-            data.append(user.to_json())
-        message['data'] = data
-        message['message'] = 'get all user successful'
+            result.append(user.to_json())
+        return result, 200
 
+    @auth.login_required
+    def post(self):
+        #add user
+        parser = reqparse.RequestParser(bundle_errors=True)
+        parser.add_argument('username', required=True)
+        parser.add_argument('password', required=True)
+        args = parser.parse_args()
 
+        if g.user.id != 1:
+            abort(403, message='not admin')
+        
+        user = User.query.filter_by(username=args['username']).first()
+        if user is not None:
+            abort(403, message='user:{} already exist'.format(user.username))
 
+        user = User(args['username'], args['password'], g.user.id)
+
+        db.session.add(user)
+        db.session.commit()
+        return user.to_json(), 200
+
+class UserResource(Resource):
+    def __init__(self):
+        pass
+
+    @auth.login_required
+    def get(self, u_id):
+        if g.user.id != u_id and g.user.id != 1:
+            abort(403, message='you cant get others information')
+        user = User.query.get(u_id)
+        if user is None:
+            abort(404, message='user_id:{} not exist'.format(u_id))
+        return user.to_json(), 200
+    
+    @auth.login_required
+    def put(self, u_id):
+        parser = reqparse.RequestParser(bundle_errors=True)
+        parser.add_argument('username', default=None)
+        parser.add_argument('password', default=None)
+        args = parser.parse_args()
+
+        if g.user.id != 1:
+            abort(403, message='not admin')
+
+        user = User.query.get(u_id)
+        if user is None:
+            abort(403, message='user_id:{} not exist'.format(u_id))
+
+        if args['username'] is not None:
+            user.username = args['username']
+        if args['password'] is not None:
+            user.password = args['password']
+
+        db.session.commit()
+        return user.to_json(), 200
+
+    @auth.login_required
+    def delete(self, u_id):
+        if g.user.id != 1:
+            abort(403, message='not admin')
+        user = User.query.get(u_id)
+        if user is None:
+            abort(403, message='user_id:{} not exist'.format(u_id))
+        db.session.delete(user)
+        db.session.commit()
+        return '', 204
 

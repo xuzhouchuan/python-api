@@ -108,10 +108,15 @@ class Volumne(db.Model):
         self.type = type
 
     def to_json(self):
+        vals_json = []
+        for v in self.values:
+            vals_json.append(v.to_json())
+        vals_json.sort(key=lambda e:e['order'])
         return {'id' : self.id,
                 'name' : self.name,
                 'docclass_id' : self.docclass_id,
-                'type' : self.type
+                'type' : self.type,
+                'values' : vals_json
                }
 
 #件
@@ -140,8 +145,13 @@ class Doc(db.Model):
         return '<Doc %s, %d, %d>' % (self.name, self.id, self.volumne_id)
 
     def to_json(self):
+        vals_json = []
+        for val in self.values:
+            vals_json.append(val.to_json())
+        vals_json.sort(key=lambda e:e['order'])
         return {'id' : self.id,
                 'name' : self.name,
+                'values' : vals_json,
                 'volumne_id' : self.volumne_id,
                 'volume' : self.volumne.name,
                 'path' : self.path,
@@ -271,29 +281,23 @@ class Log(db.Model):
 class BorrowAuthority(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    doc_id = db.Column(db.Integer, db.ForeignKey('doc.id'))
-    docclass_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
+    volumne_id = db.Column(db.Integer, db.ForeignKey('volumne.id'))
     start_time = db.Column(db.DateTime)
     end_time = db.Column(db.DateTime)
 
-    def __init__(self, user_id, doc_id, docclass_id, start_time, end_time):
+    def __init__(self, user_id, volumne_id, start_time, end_time):
         self.user_id = user_id
-        self.doc_id = doc_id
-        self.docclass_id = docclass_id
+        self.volumne_id = volumne_id
         self.start_time = start_time
         self.end_time = end_time
 
     def __repr__(self):
-        if self.docclass_id is not None:
-            return '<Authority %d docclass:%d %s %s>' % (self.user_id, self.docclass_id, self.start_time, self.end_time)
-        elif self.doc_id is not None:
-            return '<Authority %d doc:%d %s %s>' % (self.user_id, self.doc_id, self.start_time, self.end_time)
+        return '<BorrowAuthority %d vol:%d %s %s>' % (self.user_id, self.volumne_id, self.start_time, self.end_time)
 
     def to_json(self):
         return {'id' : self.id,
                 'user_id' : self.user_id,
-                'doc_id' : self.doc_id,
-                'docclass_id' : self.docclass_id,
+                'volumne_id' : self.volumne_id,
                 'start_time' : self.start_time,
                 'end_time' : self.end_time
                }
@@ -301,34 +305,29 @@ class BorrowAuthority(db.Model):
 class ApplyFor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    doc_id = db.Column(db.Integer, db.ForeignKey('doc.id'))
-    docclass_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
+    volumne_id = db.Column(db.Integer, db.ForeignKey('volumne.id'))
     start_time = db.Column(db.DateTime)
     end_time = db.Column(db.DateTime)
-    passed = db.Column(db.Boolean)
+    denied = db.Column(db.Boolean)
 
-    def __init__(self, user_id, doc_id, docclass_id, start_time, end_time):
+    def __init__(self, user_id, volumne_id, start_time, end_time):
         self.user_id = user_id
-        self.doc_id = doc_id
-        self.docclass_id = docclass_id
+        self.volumne_id = volumne_id
         self.start_time = start_time
         self.end_time = end_time
-        self.passed = False
+        self.denied= False
 
     def __repr__(self):
-        if self.docclass_id is not None:
-            return '<ApplyFor %d docclass:%d %s %s>' % (self.user_id, self.docclass_id, self.start_time, self.end_time)
-        elif self.doc_id is not None:
-            return '<ApplyFor %d doc:%d %s %s>' % (self.user_id, self.doc_id, self.start_time, self.end_time)
+        return '<ApplyFor %d vol:%d %s %s denied:%s>' % \
+                (self.user_id, self.volumne_id, self.start_time, self.end_time, self.denied)
 
     def to_json(self):
         return {'id' : self.id,
                 'user_id' : self.user_id,
-                'doc_id' : self.doc_id,
-                'docclass_id' : self.docclass_id,
+                'volumne_id' : self.volumne_id,
                 'start_time' : self.start_time,
                 'end_time' : self.end_time,
-                'passed' : self.passed
+                'denied' : self.denied
                }
 
 def init_db():

@@ -20,7 +20,7 @@ from flask import jsonify, g
 import werkzeug
 from app import db
 from app import auth
-from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, DocValue
+from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, DocValue, BorrowAuthority
 
 
 UPLOAD_DIR ="upload_document"
@@ -100,7 +100,8 @@ class DocResource(Resource):
     RETURN_MESSAGE = {'error' : 0, 'message' : '', 'data' : ''}
     def __init__(self):
         pass
-
+    
+    @auth.login_required
     def get(self, d_id):
         #get a doc
         doc = Doc.query.get(d_id)
@@ -108,19 +109,25 @@ class DocResource(Resource):
             abort(404, message="doc id:{} not exist".format(d_id))
 
         result = doc.to_json()
-        result['values'] = []
         result['files'] = []
-        #property values
-        for v in doc.values:
-            result['values'].append(v.to_json())
-        result['values'].sort(key=lambda e:e['order'])
-        #files
-        files = [f for f in os.listdir(doc.path) if os.path.isfile(os.path.join(doc.path, f))]
-        for file_name in files:
-            real_name = os.path.join(doc.path, f)
-            real_name = real_name.split('/', 1)
-            real_name = '%s/%s' % ('files', real_name[1])
-            result['files'].append(real_name)
+        has_auth = False
+        if g.user.id == 1:
+            has_auth = True
+        else:
+            bo_au = BorrowAuthority.query.filter_by(user_id=g.user.id, volumne_id=doc.volumne_id).first()
+            now = datetime.datetime.now()
+            if bo_au is not None and \
+               bo_au.start_time <= now and \
+               bo_au.end_time >= now:
+                has_auth = True
+        if has_auth:
+            #files
+            files = [f for f in os.listdir(doc.path) if os.path.isfile(os.path.join(doc.path, f))]
+            for file_name in files:
+                real_name = os.path.join(doc.path, f)
+                real_name = real_name.split('/', 1)
+                real_name = '%s/%s' % ('files', real_name[1])
+                result['files'].append(real_name)
         return result, 200
 
     @auth.login_required
