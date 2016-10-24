@@ -96,6 +96,7 @@ def new_user():
     #user.hash_password(password)
     db.session.add(user)
     db.session.commit()
+    Log.logging(g.user.id, datetime.now(), 'add-user', 'username:{},userid:{}'.format(user.username, user.id))
     return jsonify(user.to_json())
 
 @app.route('/api/token', methods=['POST', 'GET'])

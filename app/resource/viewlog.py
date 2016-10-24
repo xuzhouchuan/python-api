@@ -13,57 +13,47 @@ Description:
     not tested.
 """
 
-from flask_restful import Resource, reqparse
+from flask_restful import Resource, reqparse, abort
 import copy
 import json
 import datetime
-from flask import jsonify
-from sqlalchemy.sql import desc
-from app import *
-
-class CJsonEncoder(json.JSONEncoder):  
-    def default(self, obj):  
-        if isinstance(obj, datetime.datetime):  
-            return obj.strftime('%Y-%m-%d %H:%M:%S')  
-        elif isinstance(obj, date):  
-            return obj.strftime("%Y-%m-%d")  
-        else:  
-            return json.JSONEncoder.default(self, obj)  
-
+from flask import jsonify, g
+from app import auth, db
+from app.models import Log
+from sqlalchemy import desc
 
 class ViewLog(Resource):
-    RETURN_MESSAGE = {'error' : 0, 'message' : '', 'data' : ''}
     def __init__(self):
         pass
-    def get(self):
+
+    @auth.login_required
+    def post(self):
         parser = reqparse.RequestParser(bundle_errors=True)
-        #parser.add_argument('userid', type=int)
-        parser.add_argument('page', type=int)
+        parser.add_argument('page_size', type=int, default=10)
+        parser.add_argument('page', type=int, default=1)
         args = parser.parse_args()
 
-        message = copy.deepcopy(ViewLog.RETURN_MESSAGE)
+        if g.user.id != 1:
+            abort(403, message='must be root user')
 
-        #print args
-        #if 'userid' not in args or args['userid'] is None:
-        #    message['error'] = 1
-        #    message['message'] = 'invalid userid'
-        #else:
-        if 'page' not in args or args['page'] is None:
-            args['page'] = 0
-        top = (args['page'] + 1) * 10
-        skip = args['page'] * 10
+        page = args['page']
+        page_size = args['page_size']
+
+
+        paginate = Log.query.paginate(1, page_size, False)
+        total = paginate.total
+        page_num = paginate.pages
+        print total
+        if page <=0 or page > page_num:
+            args['page'] = 1
+
+        paginate = Log.query.order_by(desc(Log.optime)).paginate(page, page_size, False)
+        logs = paginate.items
         
-        print "skip:%d top:%d" % (skip, top)
-        logs = Log.query.order_by(desc(Log.optime)) 
         newdata = []
         for log in logs:
             newdata.append(log.to_json())
-        res = []
-        for i in range(skip, min(top, len(newdata))):
-            res.append(newdata[i])
-        if res is not None:
-            message['data'] = res
-        #return json.dumps(message, ensure_ascii=False, cls=CJsonEncoder), 202
-        return jsonify(data=message['data'], message=message['message'], error=message['error'])
+
+        return newdata, 200
 
             

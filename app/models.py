@@ -13,7 +13,7 @@ Date: 2016/09/07 13:26:06
 
 from passlib.apps import custom_app_context as pwd_context
 from app import db, app
-from datetime import datetime
+import datetime
 from itsdangerous import (TimedJSONWebSignatureSerializer 
                           as Serializer, BadSignature, SignatureExpired)
 
@@ -260,6 +260,12 @@ class Log(db.Model):
     opinfo = db.Column(db.String(1024))
     exinfo = db.Column(db.String(1024))
 
+    @staticmethod
+    def logging(user_id, optime, optype, opinfo, exinfo=None):
+        new_log = Log(user_id, optime, optype, opinfo, exinfo)
+        db.session.add(new_log)
+        db.session.commit()
+
     def __init__(self, user_id, optime, optype, opinfo, exinfo):
         self.user_id = user_id
         self.optime = optime
@@ -272,7 +278,7 @@ class Log(db.Model):
 
     def to_json(self):
         return {'user_id' : self.user_id,
-                'optime' : self.optime,
+                'optime' : self.optime.strftime('%Y%m%d %H:%M:%S'),
                 'optype' : self.optype,
                 'opinfo' : self.opinfo,
                 'exinfo' : self.exinfo
@@ -366,7 +372,7 @@ def init_db():
 
     if True:
         for i in range(13):
-            log = Log(1, datetime.now(), "null", "null", "null")
+            log = Log(1, datetime.datetime.now(), "null", "null", "null")
             db.session.add(log)
             db.session.commit()
 
