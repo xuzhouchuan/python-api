@@ -16,7 +16,7 @@ import json
 import datetime
 from flask import jsonify, g
 
-from app.models import ApplyFor, Volumne
+from app.models import ApplyFor, Volumne, Log
 from app import db, auth
 
 class ApplyForListResource(Resource):
@@ -53,8 +53,10 @@ class ApplyForListResource(Resource):
         vol = Volumne.query.get(vol_id)
         if vol is None:
             abort(400, message='volumne not exist')
-        old_apply_for = ApplyFor.query.filter_by(volumne_id=vol_id, user_id=g.user.id).first()
-        if old_apply_for is not None:
+        old_apply_fors = ApplyFor.query.filter_by(volumne_id=vol_id, user_id=g.user.id)
+        for old_apply_for in old_apply_fors:
+            if old_apply_for.denied:
+                continue
             abort(400, message=u'you already have a request on volumne:{}'.format(vol.name))
         start_t = datetime.datetime.strptime(start_s, '%Y-%m-%d %H:%M:%S')
         end_t = datetime.datetime.strptime(end_s, '%Y-%m-%d %H:%M:%S')
@@ -66,6 +68,10 @@ class ApplyForListResource(Resource):
         apply_for = ApplyFor(g.user.id, vol_id, start_t, end_t)
         db.session.add(apply_for)
         db.session.commit()
+
+        log_info = u'{} 申请借阅档案卷：{}, {}'.format(g.user.username, apply_for.volumne.name, apply_for.volumne.id)
+        Log.logging(g.user.id, datetime.datetime.now(), 'borrow authority', log_info)
+
         return '', 204
 
 class ApplyForResource(Resource):
@@ -86,4 +92,8 @@ class ApplyForResource(Resource):
 
         db.session.delete(apply)
         db.session.commit()
+
+        log_info = u'{} 删除了申请借阅档案卷：{}, {}'.format(g.user.username, apply.volumne.name, doc.id)
+        Log.logging(g.user.id, datetime.datetime.now(), 'borrow authority', log_info)
+
         return '', 204

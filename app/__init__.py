@@ -96,13 +96,16 @@ def new_user():
     #user.hash_password(password)
     db.session.add(user)
     db.session.commit()
-    Log.logging(g.user.id, datetime.now(), 'add-user', 'username:{},userid:{}'.format(user.username, user.id))
+    log_info = u'{} 添加用户 user_id:{}, user_name:{}'.format(g.user.username,
+            user.id, user.username)
+    Log.logging(g.user.id, datetime.datetime.now(), 'add-user', log_info)
     return jsonify(user.to_json())
 
 @app.route('/api/token', methods=['POST', 'GET'])
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token(600)
+    Log.logging(g.user.id, datetime.datetime.now(), 'login', u'{} 登录'.format(g.user.username))
     return jsonify({'token': token.decode('ascii'), 'duration': 600})
 
 @app.route('/api/auth/list', methods=['POST', 'GET'])
@@ -120,7 +123,6 @@ def list_authority():
     for apl in applys:
         result['applyfors'].append(apl.to_json())
     result['applyfors'].sort(key=lambda e:e['id'], reverse=True)
-    print "test"
     return jsonify(result), 200
 
 @app.route('/api/auth/authorize', methods=['GET']) 
@@ -136,15 +138,19 @@ def apply_authority():
     apply_for = ApplyFor.query.get(apply_for_id)
     if apply_for is None:
         return 'no such a apply for, id is:{}'.format(apply_for_id), 400
+    user_name = apply_for.user.username
+    vol_name = apply_for.volumne.name
     if action == 'deny':
         apply_for.denied = True
         db.session.commit()
-        return '', 204
-    if action == 'accept':
+    elif action == 'accept':
         user_id = apply_for.user_id
         vol_id = apply_for.volumne_id
         start_t = apply_for.start_time
         end_t = apply_for.end_time
+        #delete old BorrowAuthority
+        for bo_au in BorrowAuthority.query.filter_by(user_id=user_id, volumne_id=vol_id):
+            db.session.delete(bo_au)
         #insert in to BorrowAuthority
         borrow_auth = BorrowAuthority(user_id,
                 vol_id,
@@ -154,5 +160,9 @@ def apply_authority():
         #del in ApplyFor
         db.session.delete(apply_for)
         db.session.commit()
-        return '', 204
+
+    log_info = u'{} 设置借阅权限:action:{} user:{} volumne:{}'.format(g.user.username,
+            action, user_name, vol_name) 
+    Log.logging(g.user.id, datetime.datetime.now(), 'authorize', log_info)
+    return '', 204
     

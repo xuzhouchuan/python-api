@@ -20,7 +20,7 @@ from flask import jsonify, g
 import werkzeug
 from app import db
 from app import auth
-from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, DocValue, BorrowAuthority
+from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, DocValue, BorrowAuthority, Log
 
 
 UPLOAD_DIR ="upload_document"
@@ -94,6 +94,9 @@ class DocListResource(Resource):
                 db.session.add(new_value)
         db.session.commit()
 
+        log_info = u'{} 增加了档案件：{}/{}, {}'.format(g.user.username, vol.name, new_doc.name, new_doc.id)
+        Log.logging(g.user.id, datetime.datetime.now(), 'add doc', log_info)
+
         return new_doc.to_json()
 
 class DocResource(Resource):
@@ -122,12 +125,17 @@ class DocResource(Resource):
                 has_auth = True
         if has_auth:
             #files
-            files = [f for f in os.listdir(doc.path) if os.path.isfile(os.path.join(doc.path, f))]
-            for file_name in files:
-                real_name = os.path.join(doc.path, f)
-                real_name = real_name.split('/', 1)
-                real_name = '%s/%s' % ('files', real_name[1])
-                result['files'].append(real_name)
+            try:
+                files = [f for f in os.listdir(doc.path) if os.path.isfile(os.path.join(doc.path, f))]
+                for file_name in files:
+                    real_name = os.path.join(doc.path, f)
+                    real_name = real_name.split('/', 1)
+                    real_name = '%s/%s' % ('files', real_name[1])
+                    result['files'].append(real_name)
+            except:
+                print u"list directory:%s failed" % doc.path
+            log_info = u'{} 阅读了档案件：{}, {}'.format(g.user.username, doc.name, doc.id)
+            Log.logging(g.user.id, datetime.datetime.now(), 'get doc', log_info)
         return result, 200
 
     @auth.login_required
@@ -158,7 +166,10 @@ class DocResource(Resource):
                 new_value = DocValue(v, prop.id, doc.id, prop.name, prop.order)
                 db.session.add(new_value)
         db.session.commit()
-        #modify upload file #TODO
+
+        log_info = u'{} 修改了档案件：{}, {}'.format(g.user.username, doc.volumne.name, doc.name, doc.id)
+        Log.logging(g.user.id, datetime.datetime.now(), 'modify doc', log_info)
+
         return doc.to_json(), 200
 
     @auth.login_required
@@ -171,6 +182,10 @@ class DocResource(Resource):
         shutil.rmtree(doc.path)
         db.session.delete(doc)
         db.session.commit()
+
+        log_info = u'{} 删除了档案件：{}, {}'.format(g.user.username, doc.volumne.name, doc.name, doc.id)
+        Log.logging(g.user.id, datetime.datetime.now(), 'delete doc', log_info)
+
         return '', 204
 
         

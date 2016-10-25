@@ -22,6 +22,10 @@ class User(db.Model):
     username = db.Column(db.String(64), unique=True)
     password = db.Column(db.String(128))
     createid = db.Column(db.Integer, db.ForeignKey('user.id'))
+    #borrow authority
+    borrow_auths = db.relationship('BorrowAuthority', cascade="all,delete", backref=db.backref('user', lazy='joined'), lazy='dynamic')
+    #apply for
+    apply_fors = db.relationship('ApplyFor', cascade="all,delete", backref=db.backref('user', lazy='joined'), lazy='dynamic')
 
     #__table_args__ = {'mysql_engine':'InnoDB'}
 
@@ -99,6 +103,10 @@ class Volumne(db.Model):
     docs = db.relationship('Doc', backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
     values = db.relationship('VolumneValue', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
     properties = db.relationship('DocProperty', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
+    #borrrow authority
+    borrow_auths = db.relationship('BorrowAuthority', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
+    #apply for
+    apply_fors = db.relationship('ApplyFor', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
 
     #__table_args__ = (db.UniqueConstraint('docclass_id', 'name', name='_docclass_id_name_uc'),{'mysql_engine': 'InnoDB'})
 
@@ -257,7 +265,7 @@ class Log(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     optime = db.Column(db.DateTime)
     optype = db.Column(db.String(128))
-    opinfo = db.Column(db.String(1024))
+    opinfo = db.Column(db.String(2048))
     exinfo = db.Column(db.String(1024))
 
     @staticmethod
@@ -353,19 +361,28 @@ def init_db():
     test = User('test', 'test', 1)
     db.session.add(admin)
     db.session.add(test)
-    if True:
-        name = ['root', u'最高检', u'办公厅', u'检察长办公室', u'秘书处', u'人大代表联络处', u'新规则文书档案', u'老规则文书档案']
-        parent = [1, 1, 2, 3, 3, 3, 4, 4]
-        level = [0, 1, 2, 3, 3, 3, 4, 4]
-        type = [None, None, None, None, None, None, 0, 1]
-        for i in range(0, len(name)):
-            dep = DocClass(name[i], parent[i], level[i], type[i])
-            db.session.add(dep)
-            db.session.commit()
-    else:
-        depart = DocClass(u'你好', 1, True)
-        db.session.add(depart)
+    #docclass
+    docclass_ids = [1, 2, 3, 4, 5, 6, 7, 8]
+    name = ['root', u'最高检', u'办公厅', u'检察长办公室', u'秘书处', u'人大代表联络处', u'新规则文书档案', u'老规则文书档案']
+    parent = [1, 1, 2, 3, 3, 3, 4, 4]
+    level = [0, 1, 2, 3, 3, 3, 4, 4]
+    type = [None, None, None, None, None, None, 0, 1]
+    for i in range(0, len(name)):
+        dep = DocClass(name[i], parent[i], level[i], type[i])
+        db.session.add(dep)
         db.session.commit()
+
+    #volumne
+    vol1 = Volumne(u'卷1', docclass_ids[6], type[6])
+    db.session.add(vol1)
+    vol2 = Volumne(u'卷2', docclass_ids[7], type[7])
+    db.session.add(vol2)
+    db.session.commit()
+    #add doc
+    doc1 = Doc('文档', 1, u'upload_document/卷1/文档1/', 0, 1, datetime.datetime.now())
+    doc2 = Doc('文档2', 2, u'upload_document/卷2/文档2/', 1, 1, datetime.datetime.now())
+    db.session.add(doc1)
+    db.session.add(doc2)
 
     users = User.query.all()
     print users[0].id
