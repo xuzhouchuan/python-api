@@ -17,6 +17,7 @@ from flask import jsonify
 from flask import request
 from flask_sqlalchemy import SQLAlchemy
 from flask.ext.httpauth import HTTPBasicAuth
+from flask_whooshee import Whooshee
 import MySQLdb.cursors
 from functools import wraps
 import time
@@ -25,17 +26,22 @@ import datetime
 
 
 app = Flask(__name__)
-api = Api(app)
-mysql = MySQL(cursorclass=MySQLdb.cursors.DictCursor)
-db = SQLAlchemy(app, use_native_unicode='utf8')
-auth = HTTPBasicAuth()
-
 app.config['MYSQL_DATABASE_USER'] = 'root'
 app.config['MYSQL_DATABASE_PASSWORD'] = 'root'
 app.config['MYSQL_DATABASE_DB'] = 'test_oa'
 app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/test_oa?charset=utf8'
 app.config['SECRET_KEY'] = 'the quick brown fox jumps over the lazy dog'
+app.config['WHOOSHEE_WRITE_TIMEOUT'] = 3
+app.config['WHOOSHEE_DIR'] = 'search-index'
+app.config['WHOOSHEE_MIN_STRING_LEN'] = 1
+
+api = Api(app)
+mysql = MySQL(cursorclass=MySQLdb.cursors.DictCursor)
+db = SQLAlchemy(app, use_native_unicode='utf8')
+auth = HTTPBasicAuth()
+whooshee = Whooshee(app)
+
 mysql.init_app(app)
 
 def admin_required(f):
@@ -165,4 +171,26 @@ def apply_authority():
             action, user_name, vol_name) 
     Log.logging(g.user.id, datetime.datetime.now(), 'authorize', log_info)
     return '', 204
-    
+
+@app.route('/api/search', methods=['GET'])
+def search():
+    word = request.args.get('w', None)
+    if word is None:
+        return 'no key word', 400
+    result = {'volumnes':[], 'docs':[]}
+    #volumne&value
+    #order_by_relevance=-1, return all volumne , order by score
+    #vols = Volumne.query.join(VolumneValue).whooshee_search(word, order_by_relevance=-1).all()
+    #vols = Volumne.query.whooshee_search(word, whoosheer=VolumneVolumneValueWhoosheer).all()
+    vols = Volumne.query.whooshee_search(word).all()
+    for vol in vols:
+        result['volumnes'].append(vol.to_json())
+    #doc&value
+    #docs = Doc.query.join(DocValue).whooshee_search(word, order_by_relevance=-1).all()
+
+    #docs = Doc.query.whooshee_search(word, whoosheer=DocDocValueWhoosheer).all()
+    docs = Doc.query.whooshee_search(word).all()
+    for doc in docs:
+        result['docs'].append(doc.to_json())
+    return jsonify(result), 200
+

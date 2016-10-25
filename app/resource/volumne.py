@@ -44,9 +44,14 @@ class VolumneListResource(Resource):
 
         maybe_exit = Volumne.query.filter_by(docclass_id=args['docclass_id'], name=args['name']).first()
         if maybe_exit is not None:
-            abort(403, message='doc class {} already has the volumne:{}'.format(doc_class.name, args['name']))
+            abort(403, message=u'doc class {} already has the volumne:{}'.format(doc_class.name, args['name']))
+        vals = []
+        for key_value in args['values']:
+            k, v = key_value.split('=')
+            vals.append(v)
+        val_str = ' '.join(vals)
 
-        new_vol = Volumne(args['name'], args['docclass_id'], doc_class.type)
+        new_vol = Volumne(args['name'], args['docclass_id'], doc_class.type, val_str)
         db.session.add(new_vol)
         db.session.commit()
 
@@ -66,6 +71,9 @@ class VolumneListResource(Resource):
                 abort(403, messsage='volumne property {} not exist'.format(k))
             new_value = VolumneValue(v, vol_prop.id, new_vol.id, vol_prop.name, vol_prop.order)
             db.session.add(new_value)
+        db.session.commit()
+
+        new_vol.id = new_vol.id
         db.session.commit()
 
         return new_vol.to_json(), 200
@@ -140,6 +148,10 @@ class VolumneResource(Resource):
                 new_value = VolumneValue(v, vol_prop.id, vol.id, vol_prop.name, vol_prop.order)
                 db.session.add(new_value)
             db.session.commit()
+        vals = [v.value for v in vol.values]
+        val_str = ' '.join(vals)
+        vol.value_str = val_str
+        db.session.commit()
 
     @auth.login_required
     def delete(self, v_id):

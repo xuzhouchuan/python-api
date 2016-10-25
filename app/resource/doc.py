@@ -42,7 +42,7 @@ class DocListResource(Resource):
         parser.add_argument('name', required=True)
         parser.add_argument('volumne_id', type=int, required=True)
         parser.add_argument('values', action='append', default=[])
-        parser.add_argument('files', action='append', type=werkzeug.datastructures.FileStorage, location=['files', 'form'])
+        parser.add_argument('files', action='append', type=werkzeug.datastructures.FileStorage, location=['files', 'form'], default=[])
         args = parser.parse_args()
 
         if g.user.id != 1:

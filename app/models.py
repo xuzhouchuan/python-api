@@ -12,10 +12,12 @@ Date: 2016/09/07 13:26:06
 """
 
 from passlib.apps import custom_app_context as pwd_context
-from app import db, app
+from app import db, app, whooshee
 import datetime
 from itsdangerous import (TimedJSONWebSignatureSerializer 
                           as Serializer, BadSignature, SignatureExpired)
+from flask_whooshee import AbstractWhoosheer
+import whoosh
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -93,12 +95,14 @@ class DocClass(db.Model):
                 }
 
 #卷
+@whooshee.register_model('name', 'value_str')
 class Volumne(db.Model): 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(512))
     docclass_id = db.Column(db.Integer, db.ForeignKey('doc_class.id'))
     #0:旧的形式；1:新的形式，卷是不存在的，为了 统一形式加了这一层
     type = db.Column(db.Integer, default=0)
+    value_str = db.Column(db.Text)
     #volumne成了Doc的一个属性
     docs = db.relationship('Doc', backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
     values = db.relationship('VolumneValue', cascade="all,delete", backref=db.backref('volumne', lazy='joined'), lazy='dynamic')
@@ -110,10 +114,11 @@ class Volumne(db.Model):
 
     #__table_args__ = (db.UniqueConstraint('docclass_id', 'name', name='_docclass_id_name_uc'),{'mysql_engine': 'InnoDB'})
 
-    def __init__(self, name, docclass_id, type=0):
+    def __init__(self, name, docclass_id, type=0, value_str=None):
         self.name = name
         self.docclass_id = docclass_id
         self.type = type
+        self.value_str = value_str
 
     def to_json(self):
         vals_json = []
@@ -128,6 +133,7 @@ class Volumne(db.Model):
                }
 
 #件
+@whooshee.register_model('name', 'value_str')
 class Doc(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(512))
@@ -137,17 +143,19 @@ class Doc(db.Model):
     type = db.Column(db.Integer, default=0)
     uploader_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     upload_time = db.Column(db.DateTime)
-    values = db.relationship('DocValue', cascade="all,delete", backref=db.backref('doc', lazy='joined'), lazy='dynamic')
+    value_str = db.Column(db.Text)
+    values = db.relationship('DocValue', cascade="all,delete", backref=db.backref('doc', lazy='joined'), lazy='joined')
 
     #__table_args__ = (db.UniqueConstraint('volumne_id', 'name', name='_volumne_id_name_uc'), {'mysql_engine': 'InnoDB'})
 
-    def __init__(self, name, volumne_id, path, type, uploader_id, upload_time):
+    def __init__(self, name, volumne_id, path, type, uploader_id, upload_time, value_str=None):
         self.name = name
         self.volumne_id = volumne_id
         self.path = path
         self.type = type
         self.uploader_id = uploader_id
         self.upload_time = upload_time
+        self.value_str = value_str
 
     def __repr__(self):
         return '<Doc %s, %d, %d>' % (self.name, self.id, self.volumne_id)
@@ -344,6 +352,7 @@ class ApplyFor(db.Model):
                 'denied' : self.denied
                }
 
+
 def init_db():
     db.create_all()
     db.session.commit()
@@ -379,17 +388,18 @@ def init_db():
     db.session.add(vol2)
     db.session.commit()
     #add doc
-    doc1 = Doc('文档', 1, u'upload_document/卷1/文档1/', 0, 1, datetime.datetime.now())
-    doc2 = Doc('文档2', 2, u'upload_document/卷2/文档2/', 1, 1, datetime.datetime.now())
+    doc1 = Doc(u'文档', 1, u'upload_document/卷1/文档1/', 0, 1, datetime.datetime.now())
+    doc2 = Doc(u'文档2', 2, u'upload_document/卷2/文档2/', 1, 1, datetime.datetime.now())
     db.session.add(doc1)
     db.session.add(doc2)
+    db.session.commit()
 
     users = User.query.all()
     print users[0].id
 
     if True:
         for i in range(13):
-            log = Log(1, datetime.datetime.now(), "null", "null", "null")
+            log = Log(1, datetime.datetime.now(), u"null", u"null", u"null")
             db.session.add(log)
             db.session.commit()
 
@@ -399,6 +409,9 @@ def init_db():
 
 def drop_db():
     db.drop_all()
+
+def reindex():
+    whooshee.reindex()
 
 if __name__ == '__main__':
     pass

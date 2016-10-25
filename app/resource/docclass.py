@@ -61,7 +61,9 @@ class DocClassListResource(Resource):
         #leaf docclass, add property 
         if new_docclass.level == 4:
             order = 0
+            print args['properties']
             for prop in args['properties']:
+                print prop
                 new_prop = VolumneProperty(prop, new_docclass.id, order)
                 order += 1
                 db.session.add(new_prop)
