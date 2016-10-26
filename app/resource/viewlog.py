@@ -39,14 +39,18 @@ class ViewLog(Resource):
         page = args['page']
         page_size = args['page_size']
 
+        if page_size <= 10:
+            page_size = 10
+        if page_size >= 50:
+            page_size = 50
 
         paginate = Log.query.paginate(1, page_size, False)
         total = paginate.total
         page_num = paginate.pages
-        print total
-        if page <=0 or page > page_num:
-            args['page'] = 1
-
+        if page <= 0:
+            page = 1
+        if page > page_num:
+            page = page_num
         paginate = Log.query.order_by(desc(Log.optime)).paginate(page, page_size, False)
         logs = paginate.items
         
@@ -54,6 +58,6 @@ class ViewLog(Resource):
         for log in logs:
             newdata.append(log.to_json())
 
-        return newdata, 200
+        return {"data": newdata, "page_num" : page_num, "page_size" : page_size, "log_num": total}, 200
 
             

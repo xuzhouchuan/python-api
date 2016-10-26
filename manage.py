@@ -11,11 +11,12 @@ Author: AngelClover(AngelClover@aliyun.com)
 Date: 2016/10/13 10:47:44
 """
 
-from app import app
 from flask_script import Manager, Server
-from app.models import init_db, drop_db
+from app import app
+from app.models import *
 
 
+print app
 manager = Manager(app)
 
 @manager.command
@@ -27,10 +28,17 @@ def drop():
 def create():
     init_db()
 
+@manager.command
+def update_index():
+    "update search index"
+    reindex()
+
+@manager.command
+def hello():
+    print "hello"
 
 
-
-manager.add_command("runserver", Server(host='0.0.0.0', port=8001))
+#manager.add_command("runserver", Server(host='0.0.0.0', port=8001))
 
 
 if __name__ == "__main__":
