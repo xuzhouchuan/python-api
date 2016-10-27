@@ -347,8 +347,8 @@ class ApplyFor(db.Model):
         return {'id' : self.id,
                 'user_id' : self.user_id,
                 'volumne_id' : self.volumne_id,
-                'start_time' : self.start_time,
-                'end_time' : self.end_time,
+                'start_time' : self.start_time.strftime('%Y%m%d %H:%M:%S'),
+                'end_time' : self.end_time.strftime('%Y%m%d %H:%M:%S'),
                 'denied' : self.denied
                }
 

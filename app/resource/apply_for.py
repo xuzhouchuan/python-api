@@ -35,7 +35,7 @@ class ApplyForListResource(Resource):
             result.append(apl.to_json())
         result.sort(key=lambda e:e['id'], reverse=True)
 
-        return jsonify(result), 200
+        return result, 200
 
     @auth.login_required
     def post(self):
@@ -93,7 +93,7 @@ class ApplyForResource(Resource):
         db.session.delete(apply)
         db.session.commit()
 
-        log_info = u'{} 删除了申请借阅档案卷：{}, {}'.format(g.user.username, apply.volumne.name, doc.id)
+        log_info = u'{} 删除了申请借阅档案卷：{}, {}'.format(g.user.username, apply.volumne.name, apply.volumne.id)
         Log.logging(g.user.id, datetime.datetime.now(), 'borrow authority', log_info)
 
         return '', 204
