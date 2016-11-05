@@ -219,7 +219,7 @@ def batch_add_volumne():
     tmp_zip_filename = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + zip_filename)
     zip_file.save(tmp_zip_filename)
     zipfd = zipfile.ZipFile(tmp_zip_filename)
-    output_zip_dir = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + tmp_zip_filename)
+    output_zip_dir = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + zip_filename + "dir")
     if os.path.isdir(output_zip_dir):
        shutil.rmtree(output_zip_dir) 
     else:
@@ -318,7 +318,7 @@ def batch_add_volumne():
                 #db.session.commit()
                 order = 0
                 for v_prop in props:
-                    old_vp = VolumneProperty.query.filter_by(name=vol_prop, docclass_id=docclass_id).first()
+                    old_vp = VolumneProperty.query.filter_by(name=v_prop, docclass_id=docclass_id).first()
                     if old_vp is not None:
                         continue
                     new_vp = VolumneProperty(v_prop, docclass_id, order)
