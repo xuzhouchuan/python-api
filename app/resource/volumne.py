@@ -73,9 +73,6 @@ class VolumneListResource(Resource):
             db.session.add(new_value)
         db.session.commit()
 
-        new_vol.id = new_vol.id
-        db.session.commit()
-
         return new_vol.to_json(), 200
 
 

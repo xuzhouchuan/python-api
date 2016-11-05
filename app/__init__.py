@@ -20,8 +20,12 @@ from flask.ext.httpauth import HTTPBasicAuth
 from flask_whooshee import Whooshee
 import MySQLdb.cursors
 from functools import wraps
+import os
 import time
 import datetime
+import shutil
+import zipfile
+from util import secure_filename, parse_volumne_meta, parse_doc_meta
 #from app.models import Log
 
 
@@ -193,4 +197,176 @@ def search():
     for doc in docs:
         result['docs'].append(doc.to_json())
     return jsonify(result), 200
+
+@app.route('/api/batch_volumne', methods=['POST'])
+@auth.login_required
+def batch_add_volumne():
+    if g.user.id != 1:
+        return 'not root user, cant add user', 403
+    docclass_id_str = request.values.get('docclass_id', None)
+    if docclass_id_str is None:
+        return 'no docclass id', 400
+    docclass_id = int(docclass_id_str)
+    zip_file = request.files['zip_file']
+    if zip_file.filename == '':
+        return 'no zip file', 400
+    docclass = DocClass.query.get(docclass_id)
+    if docclass is None:
+        return 'no such a docclass', 400
+    type = docclass.type
+
+    zip_filename = secure_filename(zip_file.filename)
+    tmp_zip_filename = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + zip_filename)
+    zip_file.save(tmp_zip_filename)
+    zipfd = zipfile.ZipFile(tmp_zip_filename)
+    output_zip_dir = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + tmp_zip_filename)
+    if os.path.isdir(output_zip_dir):
+       shutil.rmtree(output_zip_dir) 
+    else:
+        os.makedirs(output_zip_dir)
+    for names in zipfd.namelist():
+        zipfd.extract(names, output_zip_dir)
+    zipfd.close()
+    vol_dir_names = os.listdir(output_zip_dir)
+    volumne_meta_filename = 'ImgArchiveH.Lst'
+    doc_meta_filename = 'ImgArchive.Lst'
+    first_time = True
+    #one volumne
+    for vol_name in vol_dir_names:
+        vol_path = os.path.join(output_zip_dir, vol_name)
+        volumne_meta_path = os.path.join(vol_path, volumne_meta_filename)
+        doc_meta_path = os.path.join(vol_path, doc_meta_filename)
+        if not os.path.isfile(volumne_meta_path) or not \
+           os.path.isfile(doc_meta_path):
+            #print "dir :%s has not meta file:%s\t%s" % (vol_name, volumne_meta_path, doc_meta_path)
+            continue
+        ret, vol_atts = parse_volumne_meta(volumne_meta_path)
+        ret, docs_atts = parse_doc_meta(doc_meta_path)
+        #old type
+        if type == 0:
+            if first_time:
+                first_time = False
+                #for old_prop in docclass.properties:
+                #    db.session.delete(old_prop)
+                #db.session.commit()
+                vol_props = [x[0] for x in vol_atts]
+                order = 0
+                for vol_prop in vol_props:
+                    old_vp = VolumneProperty.query.filter_by(name=vol_prop, docclass_id=docclass_id).first()
+                    if old_vp is not None:
+                        continue
+                    new_vp = VolumneProperty(vol_prop, docclass_id, order)
+                    order += 1
+                    db.session.add(new_vp)
+                db.session.commit()
+            #add volumne and set volumne meta 
+            value_str = ' '.join([x[1] for x in vol_atts])
+            new_volumne = Volumne(vol_name, docclass_id, type, value_str)
+            db.session.add(new_volumne)
+            db.session.commit()
+            for k, v in vol_atts:
+                vol_prop = VolumneProperty.query.filter_by(name=k, docclass_id=docclass_id).first()
+                if vol_prop is None:
+                    print "vol attr:%s not exist" % k
+                    continue
+                new_value = VolumneValue(v, vol_prop.id, new_volumne.id, vol_prop.name, vol_prop.order)
+                db.session.add(new_value)
+            db.session.commit()
+            #add doc properties
+            if len(docs_atts) == 0:
+                continue
+            doc_props = [x[0] for x in docs_atts[0]]
+            order = 0
+            for doc_prop in doc_props:
+                new_doc_prop = DocProperty(doc_prop, new_volumne.id, order)
+                order += 1
+                db.session.add(new_doc_prop)
+            db.session.commit()
+            #add doc and set docs meta
+            for doc_prop in docs_atts:
+                doc_name = doc_prop[0][1]
+                doc_path = doc_name[:doc_name.rfind('.')]
+                path = os.path.join('upload_document', secure_filename(new_volumne.name), secure_filename(doc_path))
+                parent_path = os.path.join('upload_document', secure_filename(new_volumne.name))
+                orig_path = os.path.join(vol_path, doc_path)
+                v_str = ' '.join([x[1] for x in doc_prop])
+                new_doc = Doc(doc_path, new_volumne.id, path, type, 1, datetime.datetime.now(), v_str)
+                db.session.add(new_doc)
+                db.session.commit()
+                for k, v in doc_prop:
+                    doc_p = DocProperty.query.filter_by(name=k, volumne_id=new_volumne.id).first()
+                    if doc_p is None:
+                        continue
+                    n_doc_v = DocValue(v, doc_p.id, new_doc.id, doc_p.name, doc_p.order)
+                    db.session.add(n_doc_v)
+                db.session.commit()
+                if not os.path.isdir(parent_path):
+                    os.makedirs(parent_path)
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                shutil.move(orig_path, parent_path)
+        #new type
+        else:
+            if len(docs_atts) == 0:
+                continue
+            props = [x[0] for x in docs_atts[0]]
+            #volumne property to docclass
+            if first_time:
+                first_time = False
+                #for old_prop in docclass.properties:
+                #    db.session.delete(old_prop)
+                #db.session.commit()
+                order = 0
+                for v_prop in props:
+                    old_vp = VolumneProperty.query.filter_by(name=vol_prop, docclass_id=docclass_id).first()
+                    if old_vp is not None:
+                        continue
+                    new_vp = VolumneProperty(v_prop, docclass_id, order)
+                    order += 1
+                    db.session.add(new_vp)
+                db.session.commit()
+            for doc_info in docs_atts:
+                vol_name = doc_info[0][1]
+                vol_name = vol_name[:vol_name.rfind('.')]
+                #add volumne and set volmne met
+                value_str = ' '.join([x[1] for x in doc_info])
+                new_vol = Volumne(vol_name, docclass_id, type, value_str)
+                db.session.add(new_vol)
+                db.session.commit()
+                for k, v in doc_info:
+                    vp = VolumneProperty.query.filter_by(name=k, docclass_id=docclass_id).first()
+                    if vp is None:
+                        print "vol attr:%s not exit" % k
+                        continue
+                    n_v = VolumneValue(v, vp.id, new_vol.id, vp.name, vp.order)
+                    db.session.add(n_v)
+                    #doc properties
+                    n_doc_prop = DocProperty(k, new_vol.id, vp.order)
+                    db.session.add(n_doc_prop)
+                db.session.commit()
+                #add doc
+                doc_name = vol_name
+                path = os.path.join('upload_document', secure_filename(vol_name), secure_filename(doc_name))
+                parent_path = os.path.join('upload_document', secure_filename(vol_name))
+                orig_path = os.path.join(vol_path, doc_name)
+                n_doc = Doc(doc_name, new_vol.id, path, type, 1, datetime.datetime.now(), value_str)
+                db.session.add(n_doc)
+                db.session.commit()
+                for k, v in doc_info:
+                    vp = DocProperty.query.filter_by(name=k, volumne_id=new_vol.id).first()
+                    if vp is None:
+                        print "vol attr:%s not exit" % k
+                        continue
+                    n_v = DocValue(v, vp.id, n_doc.id, vp.name, vp.order)
+                    db.session.add(n_v)
+                db.session.commit()
+                if not os.path.isdir(parent_path):
+                    os.makedirs(parent_path)
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                shutil.move(orig_path, parent_path)
+
+    shutil.rmtree(output_zip_dir)
+    os.remove(tmp_zip_filename)
+    return 'OK', 200
 

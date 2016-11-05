@@ -46,14 +46,14 @@ class DocClassListResource(Resource):
         #find parent docclass
         parent = DocClass.query.get(args['parent_id']) 
         if parent is None:
-            abort(403, message="has no parent docclass:{}".format(args['parent_id']))
+            abort(400, message=u"has no parent docclass:{}".format(args['parent_id']))
         if parent.level + 1 == 4:
             #leaf node, has properties and type
             if args.get('properties', None) is None or args.get('type', None) is None:
-                abort(403, message="leaf docclass, but has not properties or type")
+                abort(400, message="leaf docclass, but has not properties or type")
         maybe_exist = DocClass.query.filter_by(parent_id=args['parent_id'], name=args['name']).first()
         if maybe_exist is not None:
-            abort(403, message='docclass:{} already has a same name child:{}'.format(parent.name, args['name']))
+            abort(400, message=u'docclass:{} already has a same name child:{}'.format(parent.name, args['name']))
         new_docclass = DocClass(args['name'], args['parent_id'], parent.level + 1,
                 args.get('type', None))
         db.session.add(new_docclass)

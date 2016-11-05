@@ -21,13 +21,10 @@ import werkzeug
 from app import db
 from app import auth
 from app.models import DocClass, Volumne, VolumneProperty, DocProperty, VolumneValue, Doc, DocValue, BorrowAuthority, Log
+from app.util import secure_filename
 
 
 UPLOAD_DIR ="upload_document"
-
-def secure_filename(file_name):
-    secure_name = re.sub('[" \-~\|\-/]', '_', file_name)
-    return secure_name
 
 class DocListResource(Resource):
     def __init__(self):
@@ -75,7 +72,8 @@ class DocListResource(Resource):
             final_path = os.path.join(path, secure_name)
             file.save(final_path)
         #add doc to database
-        new_doc = Doc(args['name'], vol.id, path, vol.type, 1, datetime.datetime.now())
+        value_str = ' '.join([kv.split('=')[1] for kv in args['values']])
+        new_doc = Doc(args['name'], vol.id, path, vol.type, 1, datetime.datetime.now(), value_str)
         
         db.session.add(new_doc)
         db.session.commit()
@@ -126,9 +124,11 @@ class DocResource(Resource):
         if has_auth:
             #files
             try:
-                files = [f for f in os.listdir(doc.path) if os.path.isfile(os.path.join(doc.path, f))]
+                fnames = os.listdir(doc.path)
+                fnames.sort()
+                files = [f for f in fnames if os.path.isfile(os.path.join(doc.path, f))]
                 for file_name in files:
-                    real_name = os.path.join(doc.path, f)
+                    real_name = os.path.join(doc.path, file_name)
                     real_name = real_name.split('/', 1)
                     real_name = '%s/%s' % ('files', real_name[1])
                     result['files'].append(real_name)
