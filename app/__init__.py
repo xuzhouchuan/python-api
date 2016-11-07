@@ -214,18 +214,20 @@ def batch_add_volumne():
     if docclass is None:
         return 'no such a docclass', 400
     type = docclass.type
-
+    
     zip_filename = secure_filename(zip_file.filename)
     tmp_zip_filename = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + zip_filename)
     zip_file.save(tmp_zip_filename)
     zipfd = zipfile.ZipFile(tmp_zip_filename)
-    output_zip_dir = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + zip_filename + "dir")
+    output_zip_dir = os.path.join("/tmp", datetime.datetime.now().strftime('%Y%m%d%H%M%S') + zip_filename.encode('utf-8') + "_dir")
     if os.path.isdir(output_zip_dir):
        shutil.rmtree(output_zip_dir) 
     else:
         os.makedirs(output_zip_dir)
-    for names in zipfd.namelist():
-        zipfd.extract(names, output_zip_dir)
+    zipfd.extractall(output_zip_dir)
+    #for name in zipfd.namelist():
+    #    name = name.decode('string-escape').decode('utf-8')
+    #    zipfd.extract(name, output_zip_dir)
     zipfd.close()
     vol_dir_names = os.listdir(output_zip_dir)
     volumne_meta_filename = 'ImgArchiveH.Lst'
@@ -260,8 +262,8 @@ def batch_add_volumne():
                     db.session.add(new_vp)
                 db.session.commit()
             #add volumne and set volumne meta 
-            value_str = ' '.join([x[1] for x in vol_atts])
-            new_volumne = Volumne(vol_name, docclass_id, type, value_str)
+            value_str = u' '.join([x[1] for x in vol_atts if x[1] is not None])
+            new_volumne = Volumne(vol_name.decode('utf-8'), docclass_id, type, value_str)
             db.session.add(new_volumne)
             db.session.commit()
             for k, v in vol_atts:
@@ -285,11 +287,14 @@ def batch_add_volumne():
             #add doc and set docs meta
             for doc_prop in docs_atts:
                 doc_name = doc_prop[0][1]
-                doc_path = doc_name[:doc_name.rfind('.')]
+                dot_index = doc_name.rfind('.')
+                doc_path = doc_name
+                if dot_index > 0:
+                    doc_path = doc_name[:doc_name.rfind('.')]
                 path = os.path.join('upload_document', secure_filename(new_volumne.name), secure_filename(doc_path))
                 parent_path = os.path.join('upload_document', secure_filename(new_volumne.name))
-                orig_path = os.path.join(vol_path, doc_path)
-                v_str = ' '.join([x[1] for x in doc_prop])
+                orig_path = os.path.join(vol_path, doc_path.encode('utf-8'))
+                v_str = u' '.join([x[1] for x in doc_prop if x[1] is not None])
                 new_doc = Doc(doc_path, new_volumne.id, path, type, 1, datetime.datetime.now(), v_str)
                 db.session.add(new_doc)
                 db.session.commit()
@@ -304,6 +309,8 @@ def batch_add_volumne():
                     os.makedirs(parent_path)
                 if os.path.isdir(path):
                     shutil.rmtree(path)
+                print orig_path
+                print parent_path
                 shutil.move(orig_path, parent_path)
         #new type
         else:
@@ -329,7 +336,7 @@ def batch_add_volumne():
                 vol_name = doc_info[0][1]
                 vol_name = vol_name[:vol_name.rfind('.')]
                 #add volumne and set volmne met
-                value_str = ' '.join([x[1] for x in doc_info])
+                value_str = u' '.join([x[1] for x in doc_info])
                 new_vol = Volumne(vol_name, docclass_id, type, value_str)
                 db.session.add(new_vol)
                 db.session.commit()

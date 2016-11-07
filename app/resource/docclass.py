@@ -36,7 +36,7 @@ class DocClassListResource(Resource):
         parser = reqparse.RequestParser(bundle_errors=True)
         parser.add_argument('name', required=True)
         parser.add_argument('parent_id', type=int, required=True)
-        parser.add_argument('properties', action='append')
+        parser.add_argument('properties', action='append', default=[])
         parser.add_argument('type', type=int)
         args = parser.parse_args()
 
@@ -47,10 +47,10 @@ class DocClassListResource(Resource):
         parent = DocClass.query.get(args['parent_id']) 
         if parent is None:
             abort(400, message=u"has no parent docclass:{}".format(args['parent_id']))
-        if parent.level + 1 == 4:
+        #if parent.level + 1 == 4:
             #leaf node, has properties and type
-            if args.get('properties', None) is None or args.get('type', None) is None:
-                abort(400, message="leaf docclass, but has not properties or type")
+        #    if args.get('properties', None) is None or args.get('type', None) is None:
+        #        abort(400, message="leaf docclass, but has not properties or type")
         maybe_exist = DocClass.query.filter_by(parent_id=args['parent_id'], name=args['name']).first()
         if maybe_exist is not None:
             abort(400, message=u'docclass:{} already has a same name child:{}'.format(parent.name, args['name']))
@@ -59,15 +59,14 @@ class DocClassListResource(Resource):
         db.session.add(new_docclass)
         db.session.commit()
         #leaf docclass, add property 
-        if new_docclass.level == 4:
-            order = 0
-            print args['properties']
-            for prop in args['properties']:
-                print prop
-                new_prop = VolumneProperty(prop, new_docclass.id, order)
-                order += 1
-                db.session.add(new_prop)
-            db.session.commit()
+        #if new_docclass.level == 4:
+        order = 0
+        for prop in args['properties']:
+            print prop
+            new_prop = VolumneProperty(prop, new_docclass.id, order)
+            order += 1
+            db.session.add(new_prop)
+        db.session.commit()
 
         return new_docclass.to_json(), 201
 
