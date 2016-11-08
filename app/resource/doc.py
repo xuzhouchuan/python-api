@@ -126,7 +126,7 @@ class DocResource(Resource):
             try:
                 fnames = os.listdir(doc.path)
                 fnames.sort()
-                files = [f for f in fnames if os.path.isfile(os.path.join(doc.path, f))]
+                files = [f for f in fnames if not f.startswith('.') and os.path.isfile(os.path.join(doc.path, f))]
                 for file_name in files:
                     real_name = os.path.join(doc.path, file_name)
                     real_name = real_name.split('/', 1)
